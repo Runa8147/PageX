@@ -1,0 +1,69 @@
+[
+  {
+    "query": "What is the moment of inertia of a solid cylinder?",
+    "expected_doc": "notes/3_calculus.png",
+    "expected_page": 1,
+    "tags": [
+      "math",
+      "formula"
+    ]
+  },
+  {
+    "query": "How does torque relate to angular acceleration?",
+    "expected_doc": "notes/1_rotational_motion.png",
+    "expected_page": 1,
+    "tags": [
+      "physics"
+    ]
+  },
+  {
+    "query": "state the chain rule for derivatives",
+    "expected_doc": "notes/3_calculus.png",
+    "expected_page": 1
+  },
+  {
+    "query": "angular momentum conservation",
+    "expected_doc": "notes/1_rotational_motion.png",
+    "expected_page": 1
+  },
+  {
+    "query": "measured energy table with mass and time",
+    "expected_doc": "digital/table.png",
+    "expected_page": 1
+  },
+  {
+    "query": "student registration form fields",
+    "expected_doc": "digital/form.png",
+    "expected_page": 1
+  },
+  {
+    "query": "system architecture camera to latex pipeline",
+    "expected_doc": "digital/diagram.png",
+    "expected_page": 1
+  },
+  {
+    "query": "hybrid search bm25 cosine similarity",
+    "expected_doc": "digital/page_sample.pdf",
+    "expected_page": 1
+  },
+  {
+    "query": "recall@5 and mrr evaluation metric",
+    "expected_doc": "digital/page_sample.pdf",
+    "expected_page": 1
+  },
+  {
+    "query": "entropy and thermodynamics second law",
+    "expected_doc": "notes/2_entropy.png",
+    "expected_page": 1
+  },
+  {
+    "query": "euler identity e i pi",
+    "expected_doc": "notes/3_calculus.png",
+    "expected_page": 1
+  },
+  {
+    "query": "kinetic energy rotating body omega",
+    "expected_doc": "notes/1_rotational_motion.png",
+    "expected_page": 1
+  }
+]

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Models are large and re-downloadable (tools/download_models.py)
+models/
+*.gguf
+
+# Runtime artifacts
+data/
+bench.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

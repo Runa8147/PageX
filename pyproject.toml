@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pagex"
+version = "1.0.0"
+description = "PageX - local-first visual document intelligence: photo of notes to annotated LaTeX, hybrid search and grounded chat, fully offline."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "PageX Team" }]
+dependencies = [
+  "numpy>=1.26",
+  "opencv-python-headless>=4.9",
+  "Pillow>=10.3",
+  "PyMuPDF>=1.24",
+  "PyQt6>=6.6",
+  "python-docx>=1.1",
+  "reportlab>=4.1",
+  "huggingface_hub>=0.24",
+  "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2"]
+
+[project.scripts]
+pagex = "pagex.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pagex*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "slow: needs a real GGUF model loaded (deselect with -m 'not slow')",
+  "gui: needs a display / QApplication",
+]
+addopts = "-ra"
+filterwarnings = ["ignore::DeprecationWarning"]

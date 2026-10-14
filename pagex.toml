@@ -1,0 +1,35 @@
+# PageX runtime configuration.
+# Everything here can be overridden from the GUI settings dialog and is
+# reloaded at runtime by pagex.core.config.load_config().
+
+[paths]
+db        = "data/pagex.db"      # single SQLite file: metadata+FTS5+vectors+KG
+artifacts = "data/artifacts"     # rendered page PNGs, generated .tex / .pdf
+models    = "models"             # GGUF files (git-ignored)
+watch     = ""                   # optional auto-ingest directory
+
+[models]
+vlm_gguf           = "models/Qwen3-VL-2B-Instruct-Q4_K_M.gguf"
+vlm_mmproj         = "models/mmproj-Qwen3-VL-2B-Instruct-F16.gguf"
+llm_gguf           = "models/granite-3.3-2b-instruct-Q4_K_M.gguf"
+llm_fallback_gguf  = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+embed_gguf         = "models/all-minilm-l6-v2-q4.gguf"
+embed_alt_gguf     = "models/bge-small-en-v1.5-q8_0.gguf"
+
+[runtime]
+n_threads     = 0        # 0 = take the value measured by tools/probe.py
+vlm_ctx       = 8192
+llm_ctx       = 4096
+n_batch       = 512
+kv_q8         = true     # quantised KV cache (ADR-002)
+vlm_max_side  = 1280     # long edge of the image handed to the VLM
+vlm_max_tokens = 3072
+llm_max_tokens = 1024
+tier          = ""       # "" = auto (from bench.json), or 1 / 2 / 3
+
+[quality]
+rrf_k        = 60
+top_k        = 5
+chunk_tokens = 400
+nms_iou      = 0.5
+min_box_frac = 0.01      # drop boxes smaller than 1% of the page
