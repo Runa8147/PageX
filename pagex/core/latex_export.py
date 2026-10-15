@@ -63,20 +63,25 @@ def compile_pdf(tex: str, out_path: str | Path, *, timeout: int = 120) -> Path:
     """Compile *tex* with pdflatex (needs a TeX install on the machine)."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    # Windows: never flash a console window when the GUI exports a PDF
+    no_window = {"creationflags": subprocess.CREATE_NO_WINDOW} \
+        if os.name == "nt" else {}
     with tempfile.TemporaryDirectory(dir=str(out_path.parent)) as tmp:
         src = Path(tmp) / "main.tex"
-        src.write_text(tex, encoding="utf-8")
+        src.write_text(tex, encoding="utf-8", newline="\n")
         env = dict(os.environ)
         env.setdefault("max_print_line", "1000")
         proc = subprocess.run(
             ["pdflatex", "-interaction=nonstopmode", "-halt-on-error",
              "-draftmode", "main.tex"],
-            cwd=tmp, capture_output=True, text=True, timeout=timeout, env=env)
+            cwd=tmp, capture_output=True, text=True, timeout=timeout, env=env,
+            **no_window)
         if proc.returncode != 0:                     # retry without -draftmode msg
             raise RuntimeError(f"pdflatex failed:\n{proc.stdout[-2000:]}")
         proc = subprocess.run(
             ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "main.tex"],
-            cwd=tmp, capture_output=True, text=True, timeout=timeout, env=env)
+            cwd=tmp, capture_output=True, text=True, timeout=timeout, env=env,
+            **no_window)
         produced = Path(tmp) / "main.pdf"
         if proc.returncode != 0 or not produced.exists():
             raise RuntimeError(f"pdflatex failed:\n{proc.stdout[-2000:]}")
@@ -376,9 +381,11 @@ def export_document(doc: DocumentModel, out_path: str | Path,
     fmt = fmt.lower()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "tex":
-        out_path.write_text(document_to_tex(doc, annotated=True), encoding="utf-8")
+        out_path.write_text(document_to_tex(doc, annotated=True),
+                            encoding="utf-8", newline="\n")
     elif fmt in ("clean-tex", "clean", "latex"):
-        out_path.write_text(document_to_tex(doc, annotated=False), encoding="utf-8")
+        out_path.write_text(document_to_tex(doc, annotated=False),
+                            encoding="utf-8", newline="\n")
     elif fmt == "pdf":
         if has_pdflatex():
             try:
@@ -389,9 +396,9 @@ def export_document(doc: DocumentModel, out_path: str | Path,
     elif fmt == "docx":
         return export_docx(doc, out_path)
     elif fmt == "html":
-        out_path.write_text(document_to_html(doc), encoding="utf-8")
+        out_path.write_text(document_to_html(doc), encoding="utf-8", newline="\n")
     elif fmt == "md":
-        out_path.write_text(document_to_markdown(doc), encoding="utf-8")
+        out_path.write_text(document_to_markdown(doc), encoding="utf-8", newline="\n")
     elif fmt == "json":
         payload = {**summary(doc),
                    "pages": [{"page_no": p.page_no, "image_path": p.image_path,

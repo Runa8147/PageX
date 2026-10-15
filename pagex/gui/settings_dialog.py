@@ -15,14 +15,14 @@ from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                              QLineEdit, QPushButton, QSpinBox, QTabWidget,
                              QVBoxLayout, QWidget)
 
-from ..core.config import BENCH_PATH, CFG
+from ..core.config import CFG
 
 log = logging.getLogger(__name__)
 
 
 def _bench() -> dict:
     try:
-        return json.loads(BENCH_PATH.read_text(encoding="utf-8"))
+        return json.loads(CFG.bench_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
 

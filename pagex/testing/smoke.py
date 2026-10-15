@@ -16,7 +16,9 @@ import tempfile
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+from ..core import paths
+
+ROOT = paths.repo_root() or paths.base_dir()
 
 Result = tuple[str, bool, str]        # (name, ok, detail)
 
@@ -69,7 +71,7 @@ def check_embedder() -> Result:
     path = CFG.embed_model_path()
     if not path.exists():
         return ("embedder GGUF", False, f"missing {path} "
-                "(python tools/download_models.py --only embed)")
+                "(pagex models download --only embed)")
     t0 = time.perf_counter()
     try:
         from pagex.core.models import embed_texts, unload_embedder
@@ -94,7 +96,7 @@ def check_models() -> Result:
     missing = CFG.missing_models()
     if missing:
         return ("model files", False,
-                f"missing {missing} -> python tools/download_models.py")
+                f"missing {missing} -> pagex models download")
     sizes = ", ".join(f"{k}={CFG.model_path(k).stat().st_size/1e6:.0f}MB"
                       for k in CFG.missing_models() or
                       ("vlm_gguf", "llm_gguf", "embed_gguf"))
@@ -119,7 +121,7 @@ def check_pdflatex() -> Result:
 
 def check_samples() -> Result:
     from pagex.testing import fixtures
-    q = ROOT / "samples" / "queries.json"
+    q = paths.samples_dir(create=True) / "queries.json"
     if not q.exists():
         fixtures.write_samples()
     n = len(json.loads(q.read_text())) if q.exists() else 0

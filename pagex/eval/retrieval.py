@@ -20,10 +20,11 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pagex.core import paths                                            # noqa: E402
 from pagex.core.retrieve import recall_at_k, reciprocal_rank, search  # noqa: E402
 from pagex.core.store import Store                                    # noqa: E402
 
-QUERIES_PATH = ROOT / "samples" / "queries.json"
+QUERIES_PATH = paths.samples_dir() / "queries.json"
 
 
 def load_queries(path: str | Path | None = None) -> list[dict]:

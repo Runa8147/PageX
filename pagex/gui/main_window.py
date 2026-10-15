@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self._wire()
         self.refresh_library()
         self._tick_status()
+        QTimer.singleShot(0, self._hint_missing_models)
 
     # ------------------------------------------------------------------
     # construction
@@ -154,9 +155,12 @@ class MainWindow(QMainWindow):
         act_bench.triggered.connect(self.run_probe)
         act_smoke = QAction("Smoke test…", self)
         act_smoke.triggered.connect(self.run_smoke)
+        act_models = QAction("Download models…", self)
+        act_models.triggered.connect(self.open_models_wizard)
         m_tools.addAction(act_settings)
         m_tools.addAction(act_bench)
         m_tools.addAction(act_smoke)
+        m_tools.addAction(act_models)
 
         m_help = self.menuBar().addMenu("&Help")
         act_about = QAction("About PageX", self)
@@ -396,12 +400,16 @@ class MainWindow(QMainWindow):
 
     def run_probe(self) -> None:
         def job() -> str:
-            import subprocess, sys
-            from ..core.config import ROOT
-            proc = subprocess.run(
-                [sys.executable, str(ROOT / "tools" / "probe.py")],
-                capture_output=True, text=True, cwd=str(ROOT))
-            return proc.stdout + proc.stderr
+            # in-process (no `sys.executable tools/probe.py` path assumptions:
+            # that file does not exist inside a pip install or frozen build)
+            import contextlib
+            import io
+
+            from ..probe import main as probe_main
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = probe_main([])
+            return f"exit={code}\n{buf.getvalue()}"
 
         def done(out: str) -> None:
             QMessageBox.information(self, "Hardware probe", out[-3000:])
@@ -426,6 +434,23 @@ class MainWindow(QMainWindow):
         run_in_background(job, on_finished=done,
                           on_error=lambda m: QMessageBox.warning(
                               self, "Smoke failed", m))
+
+    def open_models_wizard(self) -> None:
+        """Tools ▸ Download models… — manifest-driven download/verify/pack."""
+        from .models_wizard import ModelsWizard
+        ModelsWizard(self).exec()
+
+    def _hint_missing_models(self) -> None:
+        """One-shot, non-modal hint when required GGUFs are absent."""
+        try:
+            from ..core.model_manifest import missing_required
+            missing = missing_required()
+        except Exception:                      # manifest unreadable -> silent
+            return
+        if missing:
+            self.statusBar().showMessage(
+                f"model(s) not installed: {', '.join(missing)} — "
+                "Tools ▸ Download models…", 20000)
 
     def _about(self) -> None:
         from .. import __version__ as _v

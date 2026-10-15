@@ -341,8 +341,11 @@ def ingest(path: str | Path, *, title: str | None = None,
            progress: ProgressFn | None = None,
            vision_fn: VisionFn | None = None, generate_fn: GenerateFn | None = None,
            embed_fn: EmbedFn | None = None, use_kg: bool = True,
-           replace: bool = True) -> IngestReport:
-    """Full write-path: *path* -> indexed document (spec WP1-WP7)."""
+           replace: bool = True, max_pages: int | None = None) -> IngestReport:
+    """Full write-path: *path* -> indexed document (spec WP1-WP7).
+
+    ``max_pages`` stops after N pages (big scans / quick evaluations).
+    """
     from .models import embed_texts, generate, vision_generate
     vision_fn = vision_fn or vision_generate
     generate_fn = generate_fn or generate
@@ -376,7 +379,7 @@ def ingest(path: str | Path, *, title: str | None = None,
 
     try:
         notify("loading", 0, 1)
-        pages_img = load_pages(path)
+        pages_img = load_pages(path, max_pages=max_pages)
     except Exception as exc:
         store.set_status(doc_id, "error", str(exc))
         report.errors.append(f"load: {exc}")
@@ -461,11 +464,11 @@ def ingest(path: str | Path, *, title: str | None = None,
     try:
         tex = blocks_to_annotated_tex(doc)
         tex_path = art_dir / f"{doc_id}.tex"
-        tex_path.write_text(tex, encoding="utf-8")
+        tex_path.write_text(tex, encoding="utf-8", newline="\n")
         report.tex_path = str(tex_path)
         clean_path = art_dir / f"{doc_id}_clean.tex"
         clean_path.write_text(document_to_tex(doc, annotated=False),
-                              encoding="utf-8")
+                              encoding="utf-8", newline="\n")
     except Exception as exc:                        # pragma: no cover
         report.errors.append(f"tex: {exc}")
         log.exception("tex export failed")
@@ -511,7 +514,8 @@ def convert_to_latex(path: str | Path, *, title: str | None = None,
                      vision_fn: VisionFn | None = None,
                      out_formats: Sequence[str] = ("tex",),
                      out_dir: str | Path | None = None,
-                     base_name: str | None = None) -> dict[str, Path]:
+                     base_name: str | None = None,
+                     max_pages: int | None = None) -> dict[str, Path]:
     """Image/PDF -> LaTeX (+ any other export format) *without* touching the DB.
 
     Used by ``cli.py convert-notes`` and by the demo runbook's pre-generated
@@ -524,7 +528,7 @@ def convert_to_latex(path: str | Path, *, title: str | None = None,
     base = base_name or (path.stem + "_pagex")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    pages_img = load_pages(path)
+    pages_img = load_pages(path, max_pages=max_pages)
     doc = make_document(new_id("doc"), title or path.stem, str(path),
                         infer_kind(path, handwritten))
     seq = 0

@@ -8,9 +8,10 @@ exact commands and test IDs that prove each one. All commands assume the venv:
 
 | step | command | status |
 |---|---|---|
-| deps | `pip install -r requirements.txt`, `CMAKE_ARGS="-DGGML_NATIVE=ON" pip install llama-cpp-python` | done (0.3.36, source build) |
-| models | `python tools/download_models.py [--only vlm llm]` | 6 files in `models/` (~5.5 GB) |
-| probe | `python tools/probe.py [--fast\|--full]` → `bench.json` | threads=4, tier=2, LLM 7.86 tok/s, VLM ~93 s/page |
+| deps | `pip install -e ".[dev]"` (compiler-free) + `pip install -e ".[llm]"` for inference (`CMAKE_ARGS="-DGGML_NATIVE=ON"` CPU build); `requirements.txt` is the legacy equivalent | done (llama-cpp-python = `llm` extra) |
+| models | `pagex models list\|download\|verify\|install-pack\|pack` (`pagex/models_manifest.json`: repo, size, SHA-256, license) — shims: `python tools/download_models.py [--only vlm llm]` | 8 files in `models/` (~7 GB), 4 required |
+| probe | `pagex bench [--fast\|--full]` → `bench.json` — shim: `python tools/probe.py` | threads=4, tier=2, LLM 7.86 tok/s, VLM ~93 s/page |
+| sanity | `pagex doctor` (paths/deps/models), `pagex demo` (sample corpus), `pagex smoke` | cross-platform: `pagex/core/paths.py` ladder (PAGEX_HOME > checkout > frozen > platformdirs), Windows-safe subprocess/console |
 
 ## WP1 — preprocessing (`preprocess.py`) — TC-UNIT-01, TC-UNIT-02
 
@@ -91,10 +92,24 @@ python -m pagex.eval.retrieval --json
 ## WP12 — demo hygiene
 
 ```bash
-python -m pagex.testing.smoke        # 15/15, no heavy models
+pagex smoke                          # 15/15, no heavy models
+pagex bench                          # refresh bench.json before a demo
 python -m pagex.testing.fixtures     # regenerates samples/ deterministically
-python tools/probe.py                # refresh bench.json before a demo
-python -m pytest tests -q            # 124 tests
+QT_QPA_PLATFORM=offscreen python -m pytest tests -q -m "not slow"   # 164 tests
+```
+
+## WP13 — distribution & cross-platform (this branch)
+
+path ladder + `PAGEX_HOME` (`pagex/core/paths.py`), model manifest with
+download/verify/install-pack (`pagex/core/model_manifest.py`), real CLI in
+`pagex/cli.py` (`doctor`/`demo`/`models`/`--max-pages`), GUI model wizard,
+PyInstaller specs + Inno Setup + Dockerfile + GitHub Actions matrix.
+Rationale and commands: `docs/packaging.md`, `packaging/README.md`.
+
+```bash
+pagex doctor                         # where state lives, on this OS
+pagex models list                    # 8 weights, SHA-256 + license, never bundled
+./packaging/build_linux.sh           # Windows: packaging\build_windows.ps1
 ```
 
 ## Test ID index
@@ -112,6 +127,10 @@ python -m pytest tests -q            # 124 tests
 | integration | TC-INT-04 | `tests/integration/test_search.py` |
 | integration | TC-INT-05 | `tests/integration/test_chat.py` |
 | integration | TC-INT-06 | `tests/integration/test_cli.py` |
+| integration | distribution surface (doctor/demo/models/shims/max-pages) | `tests/integration/test_cli.py` |
+| integration | real 126-page scan (skips if the PDF is absent) | `tests/integration/test_pdf_notes.py` |
+| unit | path ladder / portable mode | `tests/unit/test_paths.py` |
+| unit | model manifest, verify, download, install-pack | `tests/unit/test_model_manifest.py` |
 | integration (gui) | TC-GUI-01..05 | `tests/integration/test_gui.py` |
 | perf | TC-PERF-01/02/03 | `tests/perf/test_budgets.py` |
 
@@ -124,4 +143,4 @@ python -m pytest tests -q            # 124 tests
 | peak RSS | ≤ 6.2 GB | **3.05 GB** (release → 0.15 GB) |
 | LLM | ≥ 6 tok/s for tier 1 | **7.86 tok/s** |
 | VLM | functional on tier 3 | **~93 s/page** (was 1904 s/page) |
-| suite | green | **124 passed, 0 failed** |
+| suite | green | **164 passed, 0 failed** (`-m "not slow"`) |

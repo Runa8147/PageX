@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "note": "GGUF weights are never bundled in binaries or on PyPI. `pagex models download` fetches them here (resumable), `verify` re-checks SHA-256, `install-pack` installs an offline copy for air-gapped machines.",
+  "licenses": "All weights below are Apache-2.0 (see NOTICE). Code is MIT.",
+  "models": [
+    {
+      "key": "vlm",
+      "config_key": "vlm_gguf",
+      "role": "VLM primary (page image -> structured JSON)",
+      "required": true,
+      "tier": 1,
+      "repo": "lmstudio-community/Qwen3-VL-2B-Instruct-GGUF",
+      "file": "Qwen3-VL-2B-Instruct-Q4_K_M.gguf",
+      "dest": "Qwen3-VL-2B-Instruct-Q4_K_M.gguf",
+      "size_bytes": 1107409856,
+      "sha256": "c58d0e9dabbd77b4e78f3b5e8bf761ed2e2dd5a491bd68558c426ea57a306c33",
+      "license": "Apache-2.0"
+    },
+    {
+      "key": "vlm_mmproj",
+      "config_key": "vlm_mmproj",
+      "role": "VLM projector (vision tower, F16)",
+      "required": true,
+      "tier": 1,
+      "repo": "lmstudio-community/Qwen3-VL-2B-Instruct-GGUF",
+      "file": "mmproj-Qwen3-VL-2B-Instruct-F16.gguf",
+      "dest": "mmproj-Qwen3-VL-2B-Instruct-F16.gguf",
+      "size_bytes": 819394752,
+      "sha256": "2a57153fe566cca74616c71494b8e950549cc0a93fb6114ff8864dc20ed36d87",
+      "license": "Apache-2.0"
+    },
+    {
+      "key": "llm",
+      "config_key": "llm_gguf",
+      "role": "LLM primary (assembly / chat / KG)",
+      "required": true,
+      "tier": 1,
+      "repo": "unsloth/granite-3.3-2b-instruct-GGUF",
+      "file": "granite-3.3-2b-instruct-Q4_K_M.gguf",
+      "dest": "granite-3.3-2b-instruct-Q4_K_M.gguf",
+      "size_bytes": 1545303296,
+      "sha256": "8ec7f401c35853115d1d94cd7c350f4405f7468589759958eea54bd430c30963",
+      "license": "Apache-2.0"
+    },
+    {
+      "key": "embed",
+      "config_key": "embed_gguf",
+      "role": "Embedder (MiniLM-L6, 384-dim, Q4)",
+      "required": true,
+      "tier": 1,
+      "repo": "Mungert/all-MiniLM-L6-v2-GGUF",
+      "file": "all-MiniLM-L6-v2-q4_k_m.gguf",
+      "dest": "all-minilm-l6-v2-q4.gguf",
+      "size_bytes": 21273376,
+      "sha256": "52fc597731228731ca711d0d698f4780742285cd96d08a3931d641215c973642",
+      "license": "Apache-2.0"
+    },
+    {
+      "key": "llm_fallback",
+      "config_key": "llm_fallback_gguf",
+      "role": "LLM fallback for Tier-2 hardware (1.5B)",
+      "required": false,
+      "tier": 2,
+      "repo": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+      "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "dest": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "size_bytes": 1117320736,
+      "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+      "license": "Apache-2.0"
+    },
+    {
+      "key": "embed_alt",
+      "config_key": "embed_alt_gguf",
+      "role": "Embedder fallback (BGE-small, 384-dim)",
+      "required": false,
+      "tier": 2,
+      "repo": "ggml-org/bge-small-en-v1.5-Q8_0-GGUF",
+      "file": "bge-small-en-v1.5-q8_0.gguf",
+      "dest": "bge-small-en-v1.5-q8_0.gguf",
+      "size_bytes": 36685152,
+      "sha256": "f046db1dc724cf4f6f0a0c5917e922823b73eb1d27b8f9a9c2797f7866974804",
+      "license": "MIT"
+    },
+    {
+      "key": "vlm_alt",
+      "config_key": "vlm_alt_gguf",
+      "role": "VLM alternate (slower, kept for A/B)",
+      "required": false,
+      "tier": 3,
+      "repo": "ggml-org/Qwen2.5-VL-3B-Instruct-GGUF",
+      "file": "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+      "dest": "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+      "size_bytes": 1929901056,
+      "sha256": "d02fe9b69ad8cadbbd228e387667af66612c44bed29ffc8eb1e7caf9ac486c12",
+      "license": "Apache-2.0"
+    },
+    {
+      "key": "vlm_alt_mmproj",
+      "config_key": "vlm_alt_mmproj",
+      "role": "VLM alternate projector (Q8_0)",
+      "required": false,
+      "tier": 3,
+      "repo": "ggml-org/Qwen2.5-VL-3B-Instruct-GGUF",
+      "file": "mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
+      "dest": "mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf",
+      "size_bytes": 844757728,
+      "sha256": "980c9b2f78c04e6cff93d277ada09e768394f112d75db3b4e9dea8a69f9fb904",
+      "license": "Apache-2.0"
+    }
+  ]
+}

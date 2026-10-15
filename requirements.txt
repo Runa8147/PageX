@@ -1,3 +1,8 @@
+# NOTE: pyproject.toml is the source of truth (`pip install -e ".[dev,llm]"`);
+# this file is the manual/legacy equivalent. llama-cpp-python is the *only*
+# compiler-needing package, so pyproject keeps it out of the base deps (the
+# `llm` extra) - remove the block below for a compiler-free setup.
+
 # --- Core inference ---------------------------------------------------
 # llama-cpp-python is installed separately (needs a CPU-optimised build):
 #   export CMAKE_ARGS="-DGGML_NATIVE=ON"
@@ -23,9 +28,11 @@ reportlab>=4.1
 # --- Model acquisition / telemetry ------------------------------------
 huggingface_hub>=0.24
 psutil>=5.9
+platformdirs>=4.2          # user config/data dirs (stdlib fallback if absent)
 
 # --- Testing -----------------------------------------------------------
 pytest>=8.2
+pytest-qt>=4.4
 
 # --- Optional accelerators (lazy-imported, never required) -------------
 # docling>=2.0

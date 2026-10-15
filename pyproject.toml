@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "PageX Team" }]
+keywords = ["ocr", "handwriting", "rag", "latex", "offline", "pdf"]
 dependencies = [
   "numpy>=1.26",
   "opencv-python-headless>=4.9",
@@ -19,17 +20,35 @@ dependencies = [
   "python-docx>=1.1",
   "reportlab>=4.1",
   "huggingface_hub>=0.24",
+  "platformdirs>=4.2",
   "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.2"]
+# llama-cpp-python compiles native code (VS Build Tools on Windows,
+# build-essential+cmake on Linux).  It is an *extra* on purpose: a plain
+# `pip install -e ".[dev]"` and the CI matrix must never require a compiler,
+# while `pip install "pagex[llm]"` (or the frozen binaries, which bundle the
+# compiled library) is what actually runs inference.
+llm = ["llama-cpp-python>=0.3.5"]
+digital = ["docling>=2.0"]
+full = ["pagex[llm,digital]"]
+dev = ["pytest>=8.2", "pytest-qt>=4.4", "pyinstaller>=6.6"]
 
 [project.scripts]
 pagex = "pagex.cli:main"
 
+[project.gui-scripts]          # no console window on Windows
+pagex-gui = "pagex.gui.app:main"
+
+[project.urls]
+Repository = "https://github.com/pagex/pagex"
+
 [tool.setuptools.packages.find]
 include = ["pagex*"]
+
+[tool.setuptools.package-data]
+pagex = ["models_manifest.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

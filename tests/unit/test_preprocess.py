@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from PIL import Image
 
 from pagex.core import preprocess as pp
 from pagex.testing import fixtures
@@ -97,3 +98,38 @@ def test_thumbnail_is_bounded():
     page = np.array(fixtures.handwritten_page(size=(1240, 1754)))
     thumb = pp.thumbnail(page, px=256)
     assert max(thumb.shape[:2]) == 256
+
+
+# ---------------------------------------------------------------------------
+# colour fidelity (regression: saved pages once came back R/B swapped)
+# ---------------------------------------------------------------------------
+def test_save_page_preserves_colour(tmp_path):
+    """A red page must still be red after ``save_page`` (RGB in -> RGB file).
+
+    ``save_page`` used to hand PIL a channel-reversed array, so every page
+    written to the artifacts dir (and shown in the GUI viewer) had its reds
+    and blues swapped - blue margin lines, orange highlights.
+    """
+    red = np.zeros((32, 48, 3), dtype=np.uint8)
+    red[..., 0] = 255
+    out = pp.save_page(red, tmp_path / "page.png")
+    back = np.array(Image.open(out))
+    assert back.shape == red.shape
+    assert tuple(int(v) for v in back[0, 0]) == (255, 0, 0), \
+        "save_page must not swap the red and blue channels"
+
+
+def test_save_page_roundtrip_is_lossless(tmp_path):
+    page = np.array(fixtures.handwritten_page(seed=3).convert("RGB"))
+    out = pp.save_page(page, tmp_path / "p.png")
+    back = pp.load_image(out)                      # PIL -> RGB
+    assert back.shape == page.shape
+    assert np.array_equal(back, page), \
+        "PNG is lossless: save + load must reproduce the exact pixels"
+
+
+def test_save_page_writes_grey_pages_as_grey(tmp_path):
+    grey = np.full((20, 30), 17, dtype=np.uint8)
+    out = pp.save_page(grey, tmp_path / "g.png")
+    assert np.array(Image.open(out)).dtype == np.uint8
+    assert Image.open(out).mode in ("L", "LA")

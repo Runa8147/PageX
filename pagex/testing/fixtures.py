@@ -18,24 +18,37 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-ROOT = Path(__file__).resolve().parents[2]
+from ..core import paths
+
+ROOT = paths.repo_root() or paths.base_dir()
 SAMPLES = ROOT / "samples"
 
 HAND_FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    r"C:\Windows\Fonts\comic.ttf",            # Windows: handwriting-ish
+    r"C:\Windows\Fonts\segoeui.ttf",
+    "/System/Library/Fonts/Supplemental/Comic Sans MS.ttf",
 ]
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    r"C:\Windows\Fonts\segoeui.ttf",
+    r"C:\Windows\Fonts\arial.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
 ]
 FONT_BOLD = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    r"C:\Windows\Fonts\segoeuib.ttf",
+    r"C:\Windows\Fonts\arialbd.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
 ]
 MONO_FONT = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    r"C:\Windows\Fonts\consola.ttf",          # Windows: Consolas
+    "/System/Library/Fonts/Menlo.ttc",
 ]
 
 A4 = (1240, 1754)          # 150 dpi
@@ -318,8 +331,12 @@ CANNED_TABLE_JSON = json.dumps({
 
 
 def write_samples(target: Path | None = None) -> dict[str, Path]:
-    """Materialise the sample corpus used by eval + the demo runbook."""
-    target = Path(target or SAMPLES)
+    """Materialise the sample corpus used by eval + the demo runbook.
+
+    Default location follows the platform ladder (``PAGEX_HOME`` -> bundled
+    -> repository checkout -> user data dir); pass *target* to override.
+    """
+    target = Path(target) if target else paths.samples_dir(create=True)
     (target / "notes").mkdir(parents=True, exist_ok=True)
     (target / "digital").mkdir(parents=True, exist_ok=True)
     written: dict[str, Path] = {}

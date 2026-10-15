@@ -14,6 +14,11 @@ models/
 data/
 bench.json
 
+# Build outputs (PyInstaller / packaging, see packaging/README.md)
+dist/
+build/
+.venv-build/
+
 # Editors / OS
 .vscode/
 .idea/

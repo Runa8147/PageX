@@ -4,6 +4,11 @@ ADR: one flat ``Config`` object (``CFG``) loaded from ``pagex.toml``.  Flat
 on purpose - every subsystem does ``from .config import CFG`` and reads
 ``CFG.llm_gguf`` etc.  The GUI settings dialog calls :meth:`Config.reload`
 / :meth:`Config.save` to persist changes back to the TOML file.
+
+Cross-platform: *where* ``pagex.toml`` lives and what relative paths inside
+it resolve against is decided by :mod:`pagex.core.paths` (``PAGEX_HOME``
+portable mode, source checkout, frozen build, ``pip install``).  Nothing in
+this file touches ``__file__``-relative data.
 """
 from __future__ import annotations
 
@@ -14,14 +19,24 @@ import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from . import paths
+
 log = logging.getLogger(__name__)
 
-#: repository root (…/pagex_final)
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PATH = ROOT / "pagex.toml"
-BENCH_PATH = ROOT / "bench.json"
+#: where relative paths resolve against (dev: repository root)
+ROOT = paths.base_dir()
+DEFAULT_PATH = paths.default_config_path()
+BENCH_PATH = paths.bench_path()
 
 _TRUE = {"1", "true", "yes", "on"}
+_NON_TOML_FIELDS = {"path", "base"}
+
+
+def _base_for(config_path: Path) -> Path:
+    """Directory relative paths in *config_path* resolve against."""
+    if config_path == paths.default_config_path():
+        return paths.base_dir()
+    return config_path.parent
 
 
 @dataclass
@@ -60,15 +75,15 @@ class Config:
 
     # bookkeeping
     path: Path = field(default=DEFAULT_PATH, repr=False)
+    base: Path = field(default=ROOT, repr=False)
 
     # ------------------------------------------------------------------
-    # path helpers (all repository-relative inputs are resolved here so
-    # the app works no matter what the process CWD is)
+    # path helpers (all pagex.toml-relative inputs are resolved here so
+    # the app works no matter what the process CWD or OS is)
     # ------------------------------------------------------------------
-    @staticmethod
-    def _abs(p: str | Path) -> Path:
-        p = Path(p)
-        return p if p.is_absolute() else (ROOT / p)
+    def _abs(self, p: str | Path) -> Path:
+        p = Path(p).expanduser()
+        return p if p.is_absolute() else (self.base / p)
 
     @property
     def db_path(self) -> Path:
@@ -94,8 +109,15 @@ class Config:
     # ------------------------------------------------------------------
     @classmethod
     def load(cls, path: Path | str | None = None) -> "Config":
-        """Read *path* (default: ./pagex.toml) over the dataclass defaults."""
-        cfg = cls(path=Path(path) if path else DEFAULT_PATH)
+        """Read *path* (default: the platform-aware ``pagex.toml``).
+
+        Relative paths inside the file resolve against :func:`pagex.core.paths.base_dir`
+        for the default file (portable / checkout / installed) and against the
+        file's own directory for an explicitly supplied config.
+        """
+        target = (Path(path).expanduser().resolve() if path
+                  else paths.default_config_path())
+        cfg = cls(path=target, base=_base_for(target))
         if cfg.path.exists():
             with open(cfg.path, "rb") as fh:
                 data = tomllib.load(fh)
@@ -103,7 +125,7 @@ class Config:
             for section in data.values():
                 if isinstance(section, dict):
                     flat.update(section)
-            known = {f.name for f in fields(cls)} - {"path"}
+            known = {f.name for f in fields(cls)} - _NON_TOML_FIELDS
             for key, value in flat.items():
                 if key not in known:
                     log.debug("pagex.toml: ignoring unknown key %r", key)
@@ -151,7 +173,7 @@ class Config:
                 lines.append(f"{key:<14} = {text}")
             lines.append("")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("\n".join(lines), encoding="utf-8")
+        target.write_text("\n".join(lines), encoding="utf-8", newline="\n")
         self.path = target
         log.info("wrote %s", target)
         return target
@@ -164,7 +186,7 @@ class Config:
         """``n_threads`` resolved from bench.json when set to 0."""
         if self.n_threads and self.n_threads > 0:
             return int(self.n_threads)
-        bench = _read_bench()
+        bench = self.read_bench()
         if bench:
             for key in ("n_threads", "threads"):
                 if bench.get(key):
@@ -175,7 +197,7 @@ class Config:
     def effective_tier(self) -> str:
         if self.tier in ("1", "2", "3"):
             return str(self.tier)
-        bench = _read_bench()
+        bench = self.read_bench()
         tier = str((bench or {}).get("tier", "1"))
         return tier if tier in ("1", "2", "3") else "1"
 
@@ -201,11 +223,24 @@ class Config:
         alt = self.model_path("llm_fallback_gguf")
         if not primary.exists():
             return alt if alt.exists() else primary
-        bench = _read_bench()
+        bench = self.read_bench()
         llm_s = float((bench.get("llm") or {}).get("tok_per_s") or 0.0)
         if bench and 0.0 < llm_s < 6.0 and alt.exists():
             return alt
         return primary
+
+    @property
+    def bench_path(self) -> Path:
+        """``bench.json`` written by ``pagex bench`` (beside this config)."""
+        return self.base / "bench.json"
+
+    def read_bench(self) -> dict:
+        """Hardware probe output (empty dict when not probed yet)."""
+        import json
+        try:
+            return json.loads(self.bench_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
 
     def missing_models(self) -> list[str]:
         needed = ["vlm_gguf", "vlm_mmproj", "llm_gguf", "embed_gguf"]
@@ -221,13 +256,9 @@ class Config:
         return primary
 
 
-def _read_bench() -> dict:
-    """``bench.json`` written by tools/probe.py (may not exist yet)."""
-    import json
-    try:
-        return json.loads(BENCH_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+def _read_bench(cfg: "Config | None" = None) -> dict:
+    """``bench.json`` written by ``pagex bench`` / tools/probe.py (may not exist)."""
+    return (cfg or CFG).read_bench()
 
 
 # ---------------------------------------------------------------------------
@@ -237,9 +268,19 @@ CFG = Config.load()
 
 
 def load_config(path: Path | str | None = None) -> Config:
-    """(Re)load ``pagex.toml`` into the process-wide :data:`CFG`."""
+    """(Re)load ``pagex.toml`` into the process-wide :data:`CFG`.
+
+    The singleton is refreshed **in place** so every module that already did
+    ``from .config import CFG`` (store, pipeline, rag, ...) sees the new
+    values - both the GUI settings dialog and ``pagex --config`` rely on it.
+    """
     global CFG
-    CFG = Config.load(path)
+    fresh = Config.load(path)
+    for f in fields(Config):
+        if f.name in _NON_TOML_FIELDS:
+            continue
+        setattr(CFG, f.name, getattr(fresh, f.name))
+    CFG.path, CFG.base = fresh.path, fresh.base
     return CFG
 
 

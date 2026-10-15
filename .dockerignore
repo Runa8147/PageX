@@ -1,0 +1,23 @@
+# Keep the Docker build context small and - above all - keep model weights
+# and user data out of the image (ADR-002: GGUFs are fetched at runtime).
+
+# weights + runtime state
+models/
+data/
+*.gguf
+
+# git history, virtualenvs, caches
+.git/
+.venv/
+**/__pycache__
+__pycache__/
+.pytest_cache/
+
+# build outputs (PyInstaller)
+dist/
+build/
+
+# large scanned PDF at the repository root.  NOTE: without `**`, a `*.pdf`
+# glob only matches at the top level of the context, so samples/digital/*.pdf
+# (part of the demo corpus) stays inside the image.
+*.pdf

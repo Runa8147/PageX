@@ -63,11 +63,20 @@ def load_image(path: str | Path) -> np.ndarray:
         return np.ascontiguousarray(np.array(im))
 
 
-def load_pages(path: str | Path, dpi: int = PDF_DPI) -> list[np.ndarray]:
-    """All pages of a PDF, or a single image, as RGB arrays."""
+def load_pages(path: str | Path, dpi: int = PDF_DPI,
+               max_pages: int | None = None) -> list[np.ndarray]:
+    """All pages of a PDF (capped at *max_pages*), or a single image, as RGB arrays.
+
+    The cap matters for big scans (the bundled AI notes are 126 pages): an
+    8 GB laptop must be able to index a document incrementally instead of
+    rasterising everything at once.
+    """
     path = Path(path)
     if path.suffix.lower() == ".pdf":
-        return [load_pdf_page(path, i, dpi=dpi) for i in range(pdf_page_count(path))]
+        n = pdf_page_count(path)
+        if max_pages is not None:
+            n = min(n, max(1, int(max_pages)))
+        return [load_pdf_page(path, i, dpi=dpi) for i in range(n)]
     return [load_image(path)]
 
 
@@ -257,12 +266,18 @@ def preprocess_page(img: np.ndarray, *, do_deskew: bool = True) -> dict:
 # side effects (kept apart from the pure functions above)
 # ---------------------------------------------------------------------------
 def save_page(img: np.ndarray, out_path: str | Path) -> Path:
+    """Persist a page array exactly as produced (RGB, or single-channel grey).
+
+    PageX's array convention is **RGB everywhere** (Pillow and PyMuPDF both
+    deliver RGB), so PIL must *not* be handed channel-reversed data: reversing
+    an RGB array writes a BGR file, which is what made saved pages render with
+    swapped red/blue (blue margin lines, orange "remember" lines) in the GUI
+    and in every exported page image.  Regression test:
+    ``tests/unit/test_preprocess.py::test_save_page_preserves_colour``.
+    """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    if img.ndim == 2:
-        Image.fromarray(img).save(out_path)
-    else:
-        Image.fromarray(img[..., ::-1]).save(out_path)   # RGB -> PIL
+    Image.fromarray(img).save(out_path)
     return out_path
 
 
