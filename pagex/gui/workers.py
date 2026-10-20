@@ -14,10 +14,17 @@ from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
 
 log = logging.getLogger(__name__)
 
+# Keep a strong reference while a job runs.  Without this, Python can garbage-
+# collect the worker (and its signal object) while the pool thread is still
+# finishing, which produced "wrapped C/C++ object has been deleted" crashes on
+# shutdown.
+_ACTIVE_WORKERS: set["FnWorker"] = set()
+
 
 class WorkerSignals(QObject):
     """Marshalled back onto the GUI thread by Qt's signal loop."""
     progress = pyqtSignal(str, int, int)      # stage, current, total
+    page = pyqtSignal(str, int)               # doc_id, page_no (live pages)
     finished = pyqtSignal(object)             # result payload
     error = pyqtSignal(str)                   # message (traceback in logs)
 
@@ -27,7 +34,8 @@ class FnWorker(QRunnable):
 
     def __init__(self, fn: Callable, *args, on_finished: Callable | None = None,
                  on_error: Callable | None = None,
-                 on_progress: Callable | None = None, **kwargs):
+                 on_progress: Callable | None = None,
+                 on_page: Callable | None = None, **kwargs):
         super().__init__()
         self.fn, self.args, self.kwargs = fn, args, kwargs
         self.signals = WorkerSignals()
@@ -37,7 +45,14 @@ class FnWorker(QRunnable):
             self.signals.error.connect(on_error)
         if on_progress:
             self.signals.progress.connect(on_progress)
+        if on_page:
+            self.signals.page.connect(on_page)
+        self.signals.finished.connect(self._release)
+        self.signals.error.connect(self._release)
         self.setAutoDelete(True)
+
+    def _release(self, *_args) -> None:
+        _ACTIVE_WORKERS.discard(self)
 
     # -- progress adapter ------------------------------------------------
     def _progress_adapter(self):
@@ -45,11 +60,18 @@ class FnWorker(QRunnable):
             self.signals.progress.emit(str(stage), int(cur), int(total))
         return emit
 
+    def _page_adapter(self):
+        def emit(doc_id: str, page_no: int) -> None:
+            self.signals.page.emit(str(doc_id), int(page_no))
+        return emit
+
     def run(self) -> None:                      # executed on a pool thread
         try:
             code = getattr(getattr(self.fn, "__code__", None), "co_varnames", ())
             if "progress" in code and "progress" not in self.kwargs:
                 self.kwargs["progress"] = self._progress_adapter()
+            if "on_page" in code and "on_page" not in self.kwargs:
+                self.kwargs["on_page"] = self._page_adapter()
             result = self.fn(*self.args, **self.kwargs)
         except Exception as exc:                # noqa: BLE001 - surface to UI
             log.error("worker %s failed: %s", getattr(self.fn, "__name__", self.fn),
@@ -72,10 +94,12 @@ def run_in_background(fn: Callable, *args,
                       on_finished: Callable | None = None,
                       on_error: Callable | None = None,
                       on_progress: Callable | None = None,
+                      on_page: Callable | None = None,
                       **kwargs) -> FnWorker:
     """Schedule *fn* on the shared thread pool and return the worker."""
     worker = FnWorker(fn, *args, on_finished=on_finished, on_error=on_error,
-                      on_progress=on_progress, **kwargs)
+                      on_progress=on_progress, on_page=on_page, **kwargs)
+    _ACTIVE_WORKERS.add(worker)
     QThreadPool.globalInstance().start(worker)
     return worker
 

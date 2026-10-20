@@ -1,9 +1,32 @@
 # PageX UI/UX + Import Performance Plan
 
-Status: **proposal for approval** (branch `feature/ui-ux-overhaul`)
+Status: **implemented core** (branch `feature/ui-ux-overhaul`)
 Scope: desktop app shell, import flow, search/ask/chat, reader, onboarding,
 and the ingestion path that makes "uploading" feel slow.
 Not in scope: changing the model stack, retrieval algorithm, or CLI contract.
+
+### Landed in this branch
+
+- Sidebar + one-canvas shell (Library / Reader / Ask) with dark-first theme,
+  compatibility aliases, drag & drop, multi-select/folder import.
+- Streaming `iter_pages()` for PDFs; first page reaches the UI before the VLM
+  finishes; instant queued rows; live page refresh; cancel + ETA activity strip.
+- Two-pass ingest: searchable document first, one-resident-LLM concept-graph
+  enrichment afterwards (`ready` → `enriching` → `ready`).
+- Reader split view with thumbnail rail, compact block inspector, annotated
+  LaTeX source dialog, citation jumps.
+- Unified Ask pane (Answer / Find passages), document scope, result cards,
+  source thumbnails, markdown/code rendering.
+- Layout-aware VLM prompt with `layout` metadata; export chooser asks for
+  **organized** vs **same layout as input**; core `faithful_pdf()` writes the
+  original page raster plus an invisible searchable text layer; CLI exposes
+  `--pdf-layout`.
+- Tests: 172 passing, including the real 126-page PDF suite: streaming,
+  deferred KG, live page callbacks, faithful PDF text extraction and layout.
+
+Still future work from the phases below: persisted job queue/retry, content-hash
+skip, Fast/Balanced/Best presets, streamed answer tokens, chat history UI,
+global command palette, and a diagnostics pane.
 
 ---
 

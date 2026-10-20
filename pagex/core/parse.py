@@ -33,25 +33,34 @@ log = logging.getLogger(__name__)
 
 NORMALISER = 1000.0
 
-PAGE_PROMPT = """You are a document digitization engine. Analyze this page image.
+PAGE_PROMPT = """You are a document digitization engine that must preserve the
+page's visual structure, not just its words. Analyze this page image.
 Return STRICT JSON only, no prose, no markdown fences:
 {"caption":"<one-sentence visual description of the page>",
+ "layout":"single_column|two_column|three_column|mixed",
  "regions":[{"bbox":[x0,y0,x1,y1] in 0..1000 normalized coords,
    "kind":"heading|paragraph|math|table|diagram|caption|note",
    "content":"<faithful transcription. math->LaTeX body; table->LaTeX tabular body;
               diagram->TikZ code or precise structural description>",
    "order":<int reading order>}]}
-Rules: preserve every symbol exactly; never invent text; blank page -> {"caption":"","regions":[]}.
+Layout rules:
+- Keep separate columns, headings, captions, equations, tables and diagrams as
+  separate regions. Never merge two columns or two visual blocks into one.
+- bbox must tightly enclose the region; do not include neighbouring content.
+- Preserve reading order and intentional line breaks, indentation and lists.
+- Transcribe every visible symbol exactly; never invent text.
+- Blank page -> {"caption":"","layout":"single_column","regions":[]}.
 Kind must be one of: heading, paragraph, math, table, diagram, caption, note."""
 
 JSON_ONLY_SUFFIX = "\nRemember: output ONLY the JSON object. No explanation."
 
-LAYOUT_PROMPT = """Analyze this page image. Return STRICT JSON only:
+LAYOUT_PROMPT = """Analyze this page image and preserve its layout. Return STRICT JSON only:
 {"caption":"<one sentence>",
+ "layout":"single_column|two_column|three_column|mixed",
  "regions":[{"bbox":[x0,y0,x1,y1] in 0..1000 normalized coords,
              "kind":"heading|paragraph|math|table|diagram|caption|note",
              "order":<int>}]}
-No content transcription, JSON only."""
+Keep columns and distinct visual blocks separate. No content transcription, JSON only."""
 
 CROP_PROMPT = """Transcribe ONLY the highlighted region of this page image.
 Return STRICT JSON: {"kind":"heading|paragraph|math|table|diagram|caption|note",
@@ -273,6 +282,7 @@ class Region:
 @dataclass
 class ParsedPage:
     caption: str = ""
+    layout: str = ""              # single_column | two_column | ...
     regions: list[Region] = field(default_factory=list)
     raw: str = ""
     mode: str = "page"            # page | crops | empty
@@ -314,6 +324,7 @@ def parse_page_json(text: str, width: int, height: int, *,
         raise ValueError(f"expected JSON object, got {type(data).__name__}")
 
     caption = str(data.get("caption") or "").strip()
+    layout = str(data.get("layout") or "").strip().lower()
     raw_regions = data.get("regions") or data.get("blocks") or []
     if not isinstance(raw_regions, list):
         raise ValueError("regions must be a list")
@@ -348,8 +359,8 @@ def parse_page_json(text: str, width: int, height: int, *,
 
     if not regions and not caption and raw_regions:
         raise ValueError("all regions were rejected")
-    return ParsedPage(caption=caption, regions=regions, raw=text,
-                      mode="page", warnings=warnings)
+    return ParsedPage(caption=caption, layout=layout, regions=regions,
+                      raw=text, mode="page", warnings=warnings)
 
 
 def region_frac(bbox: tuple[float, ...], page_area: float) -> float:
@@ -408,7 +419,10 @@ def parse_with_crops(image, layout_text: str, width: int, height: int,
         except Exception as exc:                    # keep going: partial > nothing
             warnings.append(f"crop failed {region.bbox}: {exc}")
     mode = "crops" if any(r.content for r in regions) else "empty"
-    return ParsedPage(caption=caption, regions=regions, raw=layout_text,
+    return ParsedPage(caption=caption,
+                      layout=str(layout.get("layout") or "")
+                      if isinstance(layout, dict) else "",
+                      regions=regions, raw=layout_text,
                       mode=mode, warnings=warnings)
 
 
@@ -441,4 +455,6 @@ def fill_page(page: PageModel, parsed: ParsedPage, doc_id: str,
                                seq_offset)
     page.blocks.extend(blocks)
     page.caption = parsed.caption or page.caption
+    if parsed.layout:
+        page.meta["layout"] = parsed.layout
     return blocks

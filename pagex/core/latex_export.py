@@ -20,6 +20,7 @@ from pathlib import Path
 from .blocks import (Block, DocumentModel, PAGE_MARKER_RE, block_to_lines,
                      blocks_to_annotated_tex, escape_tex, parse_marker,
                      unescape_tex)
+from .config import CFG
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ PREAMBLE = r"""\documentclass[11pt]{article}
 """
 
 EXPORT_FORMATS = ("tex", "clean-tex", "pdf", "docx", "html", "json", "md")
+#: ``organized`` = reflowed, typeset document; ``faithful`` = the original
+#: page raster with an invisible searchable text layer (layout preserved).
+PDF_LAYOUTS = ("organized", "faithful")
 
 
 # ---------------------------------------------------------------------------
@@ -131,32 +135,168 @@ def _tabular_rows(latex: str) -> list[list[str]]:
 
 
 def reportlab_pdf(doc: DocumentModel, out_path: str | Path) -> Path:
-    """Always-available PDF rendering of the document model (ADR fallback)."""
-    from reportlab.lib import colors
+    """Organized, reflowed PDF (no TeX required).
+
+    Unlike :func:`faithful_pdf`, this view discards the original geometry and
+    typesets the document for readability: title, page sections, headings,
+    equations, tables and captions in a clean single-column flow.
+    """
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
-    from reportlab.platypus import (Paragraph, Preformatted, SimpleDocTemplate,
-                                    Spacer, Table, TableStyle)
+    from reportlab.platypus import (PageBreak, Paragraph, SimpleDocTemplate,
+                                    Spacer)
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     styles = getSampleStyleSheet()
-    body = ParagraphStyle("px_body", parent=styles["BodyText"], fontName="Helvetica",
-                          fontSize=10, leading=14)
+    body = ParagraphStyle("px_body", parent=styles["BodyText"],
+                          fontName="Helvetica", fontSize=10, leading=15,
+                          spaceAfter=6)
     head = ParagraphStyle("px_head", parent=styles["Heading1"], fontSize=14,
-                          spaceBefore=12, spaceAfter=6)
+                          spaceBefore=10, spaceAfter=6)
     mono = ParagraphStyle("px_mono", parent=styles["Code"], fontName="Courier",
                           fontSize=9, leading=12)
-    title_style = ParagraphStyle("px_title", parent=styles["Title"], alignment=TA_CENTER)
+    cap = ParagraphStyle("px_cap", parent=body, textColor="#64748b",
+                         fontSize=8.5, leading=12)
+    page_label = ParagraphStyle("px_page", parent=styles["Heading2"],
+                                fontSize=11, spaceBefore=0, spaceAfter=4,
+                                textColor="#475569")
+    title_style = ParagraphStyle("px_title", parent=styles["Title"],
+                                 alignment=TA_CENTER, spaceAfter=4)
+    subtitle = ParagraphStyle("px_sub", parent=cap, alignment=TA_CENTER,
+                              spaceAfter=18)
 
-    story = [Paragraph(escape_xml(doc.title), title_style), Spacer(1, 0.4 * cm)]
-    for page in doc.pages:
+    story = [Paragraph(escape_xml(doc.title), title_style),
+             Paragraph(f"Digitized with PageX · {doc.n_pages} page(s)",
+                       subtitle)]
+    for i, page in enumerate(doc.pages):
+        if i:
+            story.append(PageBreak())
+        story.append(Paragraph(f"Page {page.page_no}", page_label))
+        if page.caption:
+            story.append(Paragraph(escape_xml(page.caption), cap))
+            story.append(Spacer(1, 4))
         for block in page.blocks:
             _append_rl_block(story, block, body, head, mono)
-    SimpleDocTemplate(str(out_path), pagesize=A4,
-                      title=doc.title, author="PageX").build(story)
+
+    def _footer(canvas, _doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColorRGB(0.45, 0.48, 0.54)
+        canvas.drawString(2 * cm, 1.1 * cm, "PageX")
+        canvas.drawRightString(A4[0] - 2 * cm, 1.1 * cm,
+                               f"{canvas.getPageNumber()}")
+        canvas.restoreState()
+
+    SimpleDocTemplate(str(out_path), pagesize=A4, title=doc.title,
+                      author="PageX", leftMargin=2.2 * cm,
+                      rightMargin=2.2 * cm, topMargin=2.0 * cm,
+                      bottomMargin=1.8 * cm,
+                      onFirstPage=_footer, onLaterPages=_footer).build(story)
+    return out_path
+
+
+def _resolve_image(path: str | None) -> Path | None:
+    """Resolve an artifact image path (relative paths use CFG.artifacts_dir)."""
+    if not path:
+        return None
+    p = Path(path)
+    if not p.is_absolute():
+        p = CFG.artifacts_dir / p
+    return p if p.exists() else None
+
+
+def _plain_block_text(block: Block) -> str:
+    if block.kind in ("math", "table", "diagram"):
+        text = block.latex or block.text or ""
+    else:
+        text = block.text or block.latex or ""
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _wrap_for_width(text: str, font: str, size: float, width: float) -> list[str]:
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    words = text.split()
+    if not words:
+        return []
+    lines, current = [], words[0]
+    for word in words[1:]:
+        candidate = current + " " + word
+        if stringWidth(candidate, font, size) <= max(1.0, width):
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def faithful_pdf(doc: DocumentModel, out_path: str | Path) -> Path:
+    """Same-layout PDF: original page raster + invisible searchable text layer.
+
+    This is the export for users who chose the VLM precisely because they do
+    not want to lose the visual layout.  Every page keeps the source geometry
+    (deskewed/upscaled page image) and the VLM blocks are written underneath as
+    an invisible text layer, so the PDF stays selectable and searchable.
+    """
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    c = canvas.Canvas(str(out_path), pageCompression=1)
+    c.setTitle(doc.title)
+    c.setAuthor("PageX")
+    c.setSubject("Layout-faithful digitization")
+    # PageX stores pages at 200 dpi.
+    pt_per_px = 72.0 / 200.0
+    for page in doc.pages:
+        w = float(page.width or 1240) * pt_per_px
+        h = float(page.height or 1754) * pt_per_px
+        c.setPageSize((w, h))
+        image = _resolve_image(page.image_path)
+        if image is not None:
+            try:
+                c.drawImage(ImageReader(str(image)), 0, 0, width=w, height=h,
+                            preserveAspectRatio=True, anchor="c", mask="auto")
+            except Exception as exc:                # unreadable/corrupt image
+                log.warning("faithful PDF: cannot draw %s: %s", image, exc)
+                image = None
+        if image is None:
+            c.setFillColorRGB(1, 1, 1)
+            c.rect(0, 0, w, h, stroke=0, fill=1)
+
+        # Invisible but extractable text, positioned at the VLM block bbox.
+        # If the page raster is missing, render the same text visibly at the
+        # original coordinates so the PDF is still useful.
+        visible_fallback = image is None
+        for block in page.blocks:
+            text = _plain_block_text(block)
+            if not text:
+                continue
+            x0, y0, x1, y1 = [float(v) for v in block.bbox]
+            bx = x0 / 1000.0 * w
+            by = h - y1 / 1000.0 * h
+            bw = max(4.0, (x1 - x0) / 1000.0 * w)
+            bh = max(4.0, (y1 - y0) / 1000.0 * h)
+            size = max(4.0, min(16.0, bh * 0.55))
+            safe = text.encode("latin-1", "replace").decode("latin-1")
+            lines = _wrap_for_width(safe, "Helvetica", size, bw)
+            max_lines = max(1, int(bh / max(size * 1.15, 1.0)))
+            text_obj = c.beginText(bx, by + bh - size)
+            try:
+                text_obj.setTextRenderMode(0 if visible_fallback else 3)
+            except Exception:                       # pragma: no cover
+                pass
+            text_obj.setFont("Helvetica", size)
+            text_obj.setLeading(size * 1.15)
+            for line in lines[:max_lines]:
+                text_obj.textLine(line)
+            c.drawText(text_obj)
+        c.showPage()
+    c.save()
     return out_path
 
 
@@ -372,13 +512,25 @@ def _tabular_to_md(latex: str) -> str:
 # one-call export
 # ---------------------------------------------------------------------------
 def export_document(doc: DocumentModel, out_path: str | Path,
-                    fmt: str) -> Path:
-    """Write *fmt* (tex|clean-tex|pdf|docx|html|json|md) to *out_path*."""
+                    fmt: str, *, pdf_layout: str = "organized") -> Path:
+    """Write *fmt* (tex|clean-tex|pdf|docx|html|json|md) to *out_path*.
+
+    For PDF, ``pdf_layout`` selects:
+
+    * ``organized`` - reflowed/typeset document (pdflatex if available, else
+      the ReportLab fallback).
+    * ``faithful`` - original page image + invisible text layer, preserving the
+      input layout exactly.
+    """
     from .blocks import summary
     import json as _json
 
     out_path = Path(out_path)
     fmt = fmt.lower()
+    layout = (pdf_layout or "organized").lower()
+    if layout not in PDF_LAYOUTS:
+        raise ValueError(f"unknown PDF layout {pdf_layout!r} "
+                         f"(choose from {PDF_LAYOUTS})")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "tex":
         out_path.write_text(document_to_tex(doc, annotated=True),
@@ -386,7 +538,9 @@ def export_document(doc: DocumentModel, out_path: str | Path,
     elif fmt in ("clean-tex", "clean", "latex"):
         out_path.write_text(document_to_tex(doc, annotated=False),
                             encoding="utf-8", newline="\n")
-    elif fmt == "pdf":
+    elif fmt in ("pdf", "pdf-faithful", "pdf-organized"):
+        if fmt == "pdf-faithful" or layout == "faithful":
+            return faithful_pdf(doc, out_path)
         if has_pdflatex():
             try:
                 return compile_pdf(document_to_tex(doc, annotated=False), out_path)

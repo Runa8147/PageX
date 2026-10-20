@@ -122,12 +122,15 @@ def test_tc_gui_02_ingest_runs_on_a_worker_thread(qapp, window, monkeypatch,
     Image.fromarray(np.asarray(sample_page)).save(path)
     win.ingest_paths([path])
 
-    ok = _spin_until(qapp, lambda: win.library.table.rowCount() == 2,
+    # The pending row appears immediately; wait for the worker to finish.
+    assert win.library.table.rowCount() == 2
+    ok = _spin_until(qapp, lambda: win.library.ingest_btn.isEnabled(),
                      deadline=20.0)
-    assert ok, "ingest completion never refreshed the library"
+    assert ok, "ingest completion never re-enabled the library"
     assert seen.get("thread") not in (None, main_thread), \
         "ingest must not run on the UI thread"
-    assert win.library.ingest_btn.isEnabled()
+    assert win.library.table.rowCount() == 2
+    assert not win.activity.isVisible()
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +196,31 @@ def test_tc_gui_04_chat_worker_roundtrip(qapp, window, monkeypatch):
 # ---------------------------------------------------------------------------
 # TC-GUI-05
 # ---------------------------------------------------------------------------
+def test_highlight_snippet_escapes_snippet_html():
+    from pagex.gui.chat_pane import _highlight_snippet
+
+    out = _highlight_snippet("mass & <script> acceleration", "mass")
+    assert "<script>" not in out
+    assert "&amp;" in out and "&lt;script&gt;" in out
+    assert out.count("<span") == 1
+    assert "mass" in out
+
+
+def test_tc_gui_06_live_page_signal_reaches_gui(qapp):
+    """FnWorker injects the core on_page callback and marshals it to the UI."""
+    from pagex.gui.workers import run_in_background
+    seen: list[tuple[str, int]] = []
+
+    def job(on_page=None):
+        on_page("doc_test", 2)
+        return True
+
+    run_in_background(job, on_page=lambda doc_id, page_no: seen.append(
+        (doc_id, page_no)))
+    ok = _spin_until(qapp, lambda: bool(seen))
+    assert ok and seen == [("doc_test", 2)]
+
+
 def test_tc_gui_05_citation_jumps_viewer_to_blocks(qapp, window):
     win, report = window
     win.open_document(report.doc_id)

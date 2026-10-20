@@ -31,12 +31,15 @@ from .config import CFG
 from .latex_export import document_to_tex, export_document
 from .parse import (JSON_ONLY_SUFFIX, LAYOUT_PROMPT, PAGE_PROMPT, ParsedPage,
                     extract_json, fill_page, parse_page_json, parse_with_crops)
-from .preprocess import (load_pages, preprocess_page, save_page, thumbnail)
+from .preprocess import (iter_pages, page_count, preprocess_page, save_page,
+                         thumbnail)
 from .store import Chunk, Store, new_id
 
 log = logging.getLogger(__name__)
 
 ProgressFn = Callable[[str, int, int], None]
+CancelFn = Callable[[], bool]                 # True -> stop at the next page
+PageFn = Callable[[str, int], None]           # (doc_id, page_no) after a page
 # vision_fn(image, prompt) -> GenResult | str      (injectable for tests)
 VisionFn = Callable[[object, str], object]
 GenerateFn = Callable[..., object]
@@ -315,6 +318,7 @@ class IngestReport:
     tex_path: str = ""
     errors: list[str] = field(default_factory=list)
     pages_done: int = 0
+    cancelled: bool = False
 
     @property
     def ok(self) -> bool:
@@ -323,7 +327,8 @@ class IngestReport:
     def to_dict(self) -> dict:
         d = {k: getattr(self, k) for k in
              ("doc_id", "title", "path", "kind", "n_pages", "n_blocks",
-              "n_chunks", "n_kg_nodes", "n_kg_edges", "seconds", "tex_path")}
+              "n_chunks", "n_kg_nodes", "n_kg_edges", "seconds", "tex_path",
+              "pages_done", "cancelled")}
         d["errors"] = list(self.errors)
         return d
 
@@ -341,10 +346,22 @@ def ingest(path: str | Path, *, title: str | None = None,
            progress: ProgressFn | None = None,
            vision_fn: VisionFn | None = None, generate_fn: GenerateFn | None = None,
            embed_fn: EmbedFn | None = None, use_kg: bool = True,
-           replace: bool = True, max_pages: int | None = None) -> IngestReport:
+           replace: bool = True, max_pages: int | None = None,
+           cancel: CancelFn | None = None, on_page: PageFn | None = None,
+           on_ready: Callable[[str], None] | None = None) -> IngestReport:
     """Full write-path: *path* -> indexed document (spec WP1-WP7).
 
     ``max_pages`` stops after N pages (big scans / quick evaluations).
+    ``cancel`` is polled between pages; ``on_page`` fires after each page so a
+    GUI can show pages while the document is still being transcribed.
+
+    Two passes keep the expensive models from thrashing:
+
+    1. vision pass: stream page -> preprocess -> VLM -> blocks/chunks (searchable)
+    2. enrichment pass: one resident LLM -> concept graph for every page
+
+    The document is marked ``ready`` after pass 1 (and ``enriching`` while
+    pass 2 runs), so search/chat never wait for the knowledge graph.
     """
     from .models import embed_texts, generate, vision_generate
     vision_fn = vision_fn or vision_generate
@@ -367,6 +384,12 @@ def ingest(path: str | Path, *, title: str | None = None,
             except Exception:                       # pragma: no cover
                 log.debug("progress callback raised", exc_info=True)
 
+    def stopped() -> bool:
+        try:
+            return bool(cancel and cancel())
+        except Exception:                           # pragma: no cover
+            return False
+
     # --- incremental: re-ingest only replaces THIS document's rows --------
     existing = store.find_document_by_source(str(path))
     doc_id = existing["doc_id"] if existing else new_id("doc")
@@ -379,7 +402,9 @@ def ingest(path: str | Path, *, title: str | None = None,
 
     try:
         notify("loading", 0, 1)
-        pages_img = load_pages(path, max_pages=max_pages)
+        n_pages = page_count(path, max_pages=max_pages)
+        if n_pages <= 0:
+            raise ValueError("document has no pages")
     except Exception as exc:
         store.set_status(doc_id, "error", str(exc))
         report.errors.append(f"load: {exc}")
@@ -387,50 +412,59 @@ def ingest(path: str | Path, *, title: str | None = None,
             store.close_all()
         raise
 
-    report.n_pages = len(pages_img)
-    store.set_status(doc_id, "indexing", None, n_pages=len(pages_img))
+    report.n_pages = n_pages
+    store.set_status(doc_id, "indexing", None, n_pages=n_pages)
     art_dir = CFG.artifacts_dir / doc_id
     art_dir.mkdir(parents=True, exist_ok=True)
     block_to_chunk: dict[str, str] = {}
-    all_chunks: list[Chunk] = []
+    pages_model: list[PageModel] = []
     seq = 0
 
-    for page_no, raw_img in enumerate(pages_img, start=1):
-        notify("preprocess", page_no, len(pages_img))
+    for page_no, raw_img in enumerate(iter_pages(path, max_pages=max_pages),
+                                      start=1):
+        if stopped():
+            report.cancelled = True
+            break
+        notify("preprocess", page_no, n_pages)
         pre = preprocess_page(raw_img)
         page = make_page(doc, page_no, width=pre["width"], height=pre["height"],
                          caption="")
+        pages_model.append(page)
         img_path = save_page(pre["image"], art_dir / f"page_{page_no:04d}.png")
         thumb = thumbnail(pre["image"])
         save_page(thumb, art_dir / f"page_{page_no:04d}_thumb.png")
         page.image_path = str(img_path.relative_to(CFG.artifacts_dir)) \
             if img_path.is_relative_to(CFG.artifacts_dir) else str(img_path)
+        page_meta = {"angle": pre["angle"], "scale": pre["scale"],
+                     "contrast": round(pre["contrast"], 2),
+                     "thumb": f"{art_dir.name}/page_{page_no:04d}_thumb.png"}
         store.put_page(page.page_id, doc_id, page_no, page.image_path,
-                       pre["width"], pre["height"],
-                       {"angle": pre["angle"], "scale": pre["scale"],
-                        "contrast": round(pre["contrast"], 2),
-                        "thumb": f"{art_dir.name}/page_{page_no:04d}_thumb.png"})
+                       pre["width"], pre["height"], page_meta)
+        # Make the raw page visible immediately, before the VLM finishes.
+        if on_page:
+            _safe_page_cb(on_page, doc_id, page_no)
 
-        notify("understand", page_no, len(pages_img))
+        notify("understand", page_no, n_pages)
         try:
             parsed = understand_page(pre["image"], width=pre["width"],
                                      height=pre["height"], vision_fn=vision_fn)
         except Exception as exc:
             report.errors.append(f"page {page_no}: {exc}")
             log.error("page %d failed: %s", page_no, exc)
+            if on_page:
+                _safe_page_cb(on_page, doc_id, page_no)
             continue
         blocks = fill_page(page, parsed, doc_id, seq_offset=seq)
         seq += len(blocks)
+        page_meta["caption"] = page.caption
+        page_meta["layout"] = page.meta.get("layout", "")
         store.put_page(page.page_id, doc_id, page_no, page.image_path,
-                       pre["width"], pre["height"],
-                       {"angle": pre["angle"], "scale": pre["scale"],
-                        "contrast": round(pre["contrast"], 2),
-                        "thumb": f"{art_dir.name}/page_{page_no:04d}_thumb.png"})
+                       pre["width"], pre["height"], page_meta)
         store.put_blocks([b.to_row() for b in blocks])
         report.n_blocks += len(blocks)
 
         # --- chunk + embed this page (incremental writes) ----------------
-        notify("chunk", page_no, len(pages_img))
+        notify("chunk", page_no, n_pages)
         chunks = make_chunks(page, doc_id, block_to_chunk)
         if chunks:
             try:
@@ -442,22 +476,17 @@ def ingest(path: str | Path, *, title: str | None = None,
                 report.errors.append(f"embed page {page_no}: {exc}")
                 log.warning("embedding failed: %s", exc)
             store.put_chunks(chunks)
-            all_chunks.extend(chunks)
         report.n_chunks += len(chunks)
 
-        # --- knowledge graph --------------------------------------------
+        # --- structural graph only (no LLM; no model swap) ----------------
         if use_kg:
-            notify("graph", page_no, len(pages_img))
-            page_text = "\n".join(b.content for b in page.blocks)
             nodes, edges = deterministic_graph(page, doc, block_to_chunk)
-            llm_nodes, llm_edges = llm_graph(page, doc, page_text,
-                                             block_to_chunk, generate_fn)
-            nodes = _merge_nodes(nodes, llm_nodes)
-            edges = _merge_edges(edges, llm_edges)
             store.put_kg(nodes, edges)
             report.n_kg_nodes += len(nodes)
             report.n_kg_edges += len(edges)
         report.pages_done += 1
+        if on_page:
+            _safe_page_cb(on_page, doc_id, page_no)
 
     # --- annotated LaTeX artifact (the SSOT) ------------------------------
     notify("export", report.pages_done, max(1, report.pages_done))
@@ -473,37 +502,56 @@ def ingest(path: str | Path, *, title: str | None = None,
         report.errors.append(f"tex: {exc}")
         log.exception("tex export failed")
 
-    status = "ready" if (report.n_blocks and report.pages_done) else "error"
+    ready = bool(report.n_blocks and report.pages_done)
+    status = "paused" if report.cancelled else ("ready" if ready else "error")
     err = "; ".join(report.errors) if report.errors and status == "error" else None
     store.set_status(doc_id, status, err, n_pages=report.n_pages)
     doc.status = status
-
     report.doc_id = doc_id
+
+    if ready and not report.cancelled:
+        # Search/chat can start now; concept-graph enrichment is optional.
+        notify("ready", report.pages_done, n_pages)
+        if on_ready:
+            try:
+                on_ready(doc_id)
+            except Exception:                       # pragma: no cover
+                log.debug("on_ready callback raised", exc_info=True)
+        if use_kg and generate_fn is not None and pages_model:
+            store.set_status(doc_id, "enriching", None, n_pages=report.n_pages)
+            notify("enrich", 0, len(pages_model))
+            for i, page in enumerate(pages_model, start=1):
+                if stopped():
+                    report.cancelled = True
+                    break
+                page_text = "\n".join(b.content for b in page.blocks)
+                llm_nodes, llm_edges = llm_graph(page, doc, page_text,
+                                                 block_to_chunk, generate_fn)
+                if llm_nodes or llm_edges:
+                    store.put_kg(llm_nodes, llm_edges)
+                    report.n_kg_nodes += len(llm_nodes)
+                    report.n_kg_edges += len(llm_edges)
+                notify("enrich", i, len(pages_model))
+            final = "paused" if report.cancelled else "ready"
+            store.set_status(doc_id, final, None, n_pages=report.n_pages)
+            doc.status = final
+
     report.seconds = time.perf_counter() - t0
     notify("done", report.pages_done, report.pages_done)
-    log.info("ingested %s -> %s (%d pages, %d blocks, %d chunks, %.1fs)",
+    log.info("ingested %s -> %s (%d pages, %d blocks, %d chunks, %.1fs%s)",
              path.name, doc_id, report.n_pages, report.n_blocks,
-             report.n_chunks, report.seconds)
+             report.n_chunks, report.seconds,
+             ", cancelled" if report.cancelled else "")
     if own_store:
         store.close_all()
     return report
 
 
-def _merge_nodes(a: list[dict], b: list[dict]) -> list[dict]:
-    seen = {n["node_id"]: n for n in a}
-    for n in b:
-        if n["node_id"] not in seen:
-            seen[n["node_id"]] = n
-    return list(seen.values())
-
-
-def _merge_edges(a: list[dict], b: list[dict]) -> list[dict]:
-    seen = {(e["src"], e["dst"], e["rel"]): e for e in a}
-    for e in b:
-        key = (e["src"], e["dst"], e["rel"])
-        if key not in seen:
-            seen[key] = e
-    return list(seen.values())
+def _safe_page_cb(fn: PageFn, doc_id: str, page_no: int) -> None:
+    try:
+        fn(doc_id, page_no)
+    except Exception:                               # pragma: no cover
+        log.debug("on_page callback raised", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +563,8 @@ def convert_to_latex(path: str | Path, *, title: str | None = None,
                      out_formats: Sequence[str] = ("tex",),
                      out_dir: str | Path | None = None,
                      base_name: str | None = None,
-                     max_pages: int | None = None) -> dict[str, Path]:
+                     max_pages: int | None = None,
+                     pdf_layout: str = "organized") -> dict[str, Path]:
     """Image/PDF -> LaTeX (+ any other export format) *without* touching the DB.
 
     Used by ``cli.py convert-notes`` and by the demo runbook's pre-generated
@@ -528,11 +577,11 @@ def convert_to_latex(path: str | Path, *, title: str | None = None,
     base = base_name or (path.stem + "_pagex")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    pages_img = load_pages(path, max_pages=max_pages)
     doc = make_document(new_id("doc"), title or path.stem, str(path),
                         infer_kind(path, handwritten))
     seq = 0
-    for page_no, raw_img in enumerate(pages_img, start=1):
+    for page_no, raw_img in enumerate(iter_pages(path, max_pages=max_pages),
+                                      start=1):
         pre = preprocess_page(raw_img)
         page = make_page(doc, page_no, width=pre["width"], height=pre["height"])
         parsed = understand_page(pre["image"], width=pre["width"],
@@ -545,7 +594,7 @@ def convert_to_latex(path: str | Path, *, title: str | None = None,
         target = out_dir / f"{base}.{ 'tex' if fmt in ('tex','clean-tex') else fmt}"
         if fmt == "clean-tex":
             target = out_dir / f"{base}_clean.tex"
-        written[fmt] = export_document(doc, target, fmt)
+        written[fmt] = export_document(doc, target, fmt, pdf_layout=pdf_layout)
     return written
 
 
@@ -620,7 +669,8 @@ def save_block_edit(store: Store, block_id: str, *,
 
 
 def ingest_paths(paths: Sequence[Path], *, progress: ProgressFn | None = None,
-                 store: Store | None = None, **kwargs) -> list[IngestReport]:
+                 store: Store | None = None, on_page: PageFn | None = None,
+                 **kwargs) -> list[IngestReport]:
     reports = []
     total = len(paths)
     for i, p in enumerate(paths, start=1):
@@ -628,7 +678,11 @@ def ingest_paths(paths: Sequence[Path], *, progress: ProgressFn | None = None,
             if progress:
                 progress(f"[{_i}/{total}] {p.name}: {stage}", cur, tot)
         try:
-            reports.append(ingest(p, progress=sub, store=store, **kwargs))
+            report = ingest(p, progress=sub, store=store, on_page=on_page,
+                            **kwargs)
+            reports.append(report)
+            if report.cancelled:
+                break
         except Exception as exc:
             log.error("ingest failed for %s: %s", p, exc)
             reports.append(IngestReport(doc_id="", title=p.stem, path=str(p),

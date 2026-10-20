@@ -133,3 +133,27 @@ def test_save_page_writes_grey_pages_as_grey(tmp_path):
     out = pp.save_page(grey, tmp_path / "g.png")
     assert np.array(Image.open(out)).dtype == np.uint8
     assert Image.open(out).mode in ("L", "LA")
+
+
+# ---------------------------------------------------------------------------
+# streaming PDFs (large scans must not be materialised at once)
+# ---------------------------------------------------------------------------
+def test_iter_pages_streams_and_caps_a_pdf(tmp_path):
+    fitz = pytest.importorskip("fitz")
+    path = tmp_path / "three_pages.pdf"
+    pdf = fitz.open()
+    for i in range(3):
+        page = pdf.new_page(width=300, height=400)
+        page.insert_text((40, 60), f"page {i + 1}")
+    pdf.save(str(path))
+    pdf.close()
+
+    assert pp.page_count(path) == 3
+    assert pp.page_count(path, max_pages=2) == 2
+    pages = pp.iter_pages(path, dpi=72, max_pages=2)
+    # a generator, not an eager list
+    assert not isinstance(pages, list)
+    first = next(pages)
+    assert first.ndim == 3 and first.shape[2] == 3
+    assert len(list(pages)) == 1
+    assert len(pp.load_pages(path, dpi=72, max_pages=2)) == 2

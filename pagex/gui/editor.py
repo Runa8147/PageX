@@ -26,9 +26,10 @@ class BlockEditor(QWidget):
     blockSelected = pyqtSignal(str)                # block_id -> viewer highlight
     saveRequested = pyqtSignal(dict)               # route through a worker
 
-    def __init__(self, store, parent=None):
+    def __init__(self, store, parent=None, *, compact: bool = False):
         super().__init__(parent)
         self.store = store
+        self.compact = compact
         self._blocks: list[dict] = []
         self._current: dict | None = None
         self._build()
@@ -38,12 +39,14 @@ class BlockEditor(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
 
-        split = QSplitter(Qt.Orientation.Horizontal)
+        split = QSplitter(Qt.Orientation.Vertical if self.compact
+                          else Qt.Orientation.Horizontal)
 
         left = QWidget()
         ll = QVBoxLayout(left)
         ll.setContentsMargins(0, 0, 0, 0)
-        ll.addWidget(QLabel("Blocks on this page"))
+        ll.addWidget(QLabel("Blocks" if self.compact
+                            else "Blocks on this page"))
         self.listw = QListWidget()
         self.listw.currentRowChanged.connect(self._on_row)
         ll.addWidget(self.listw, 1)
@@ -54,8 +57,10 @@ class BlockEditor(QWidget):
         rl.setContentsMargins(0, 0, 0, 0)
 
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.id_label = QLabel("no block selected")
         self.id_label.setObjectName("muted")
+        self.id_label.setWordWrap(True)
         self.kind_box = QComboBox()
         self.kind_box.addItems(list(BLOCK_KINDS))
         self.bbox_label = QLabel("-")
@@ -65,12 +70,14 @@ class BlockEditor(QWidget):
         form.addRow("bbox", self.bbox_label)
         rl.addLayout(form)
 
-        rl.addWidget(QLabel("Text (plain / transcription)"))
+        rl.addWidget(QLabel("Text" if self.compact
+                            else "Text (plain / transcription)"))
         self.text_edit = QPlainTextEdit()
         self.text_edit.setPlaceholderText("faithful transcription of the block")
         rl.addWidget(self.text_edit, 3)
 
-        rl.addWidget(QLabel("LaTeX (math / table / diagram body)"))
+        rl.addWidget(QLabel("LaTeX" if self.compact
+                            else "LaTeX (math / table / diagram body)"))
         self.latex_edit = QPlainTextEdit()
         self.latex_edit.setPlaceholderText(r"e.g. \tau = I\alpha")
         rl.addWidget(self.latex_edit, 2)
@@ -86,13 +93,16 @@ class BlockEditor(QWidget):
         self.revert_btn.clicked.connect(self._load_current)
         self.status = QLabel("")
         self.status.setObjectName("muted")
+        self.status.setWordWrap(True)
         buttons.addWidget(self.save_btn)
         buttons.addWidget(self.revert_btn)
         buttons.addStretch(1)
         rl.addLayout(buttons)
         rl.addWidget(self.status)
         split.addWidget(right)
-        split.setSizes([260, 520])
+        split.setSizes([160, 600] if self.compact else [260, 520])
+        if self.compact:
+            self.listw.setMaximumHeight(190)
         layout.addWidget(split, 1)
 
     # -- data ------------------------------------------------------------

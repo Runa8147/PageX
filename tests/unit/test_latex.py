@@ -70,6 +70,32 @@ def test_export_pdf_uses_fallback_when_pdflatex_missing(tmp_path, monkeypatch):
     assert out.read_bytes()[:4] == b"%PDF"
 
 
+def test_faithful_pdf_keeps_page_geometry_and_text_layer(tmp_path):
+    """The same-layout export keeps the page size and stays searchable."""
+    fitz = pytest.importorskip("fitz")
+    doc = make_doc()
+    out = tmp_path / "faithful.pdf"
+    lx.export_document(doc, out, "pdf", pdf_layout="faithful")
+    assert out.read_bytes()[:4] == b"%PDF"
+
+    with fitz.open(out) as pdf:
+        assert pdf.page_count == 1
+        rect = pdf[0].rect
+        # 1240 x 1754 px at 200 dpi, expressed in PDF points
+        assert rect.width == pytest.approx(1240 * 72 / 200, rel=1e-3)
+        assert rect.height == pytest.approx(1754 * 72 / 200, rel=1e-3)
+        text = pdf[0].get_text()
+    assert "Results & Discussion" in text
+    assert "Energy rises with mass" in text
+    assert "Trial" in text
+
+
+def test_export_document_rejects_unknown_pdf_layout(tmp_path):
+    with pytest.raises(ValueError):
+        lx.export_document(make_doc(), tmp_path / "x.pdf", "pdf",
+                           pdf_layout="scrambled")
+
+
 def test_docx_roundtrip_read_back(tmp_path):
     from docx import Document as DocxDocument
     doc = make_doc()

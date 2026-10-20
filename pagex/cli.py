@@ -158,7 +158,9 @@ def cmd_convert(args) -> int:
                                handwritten=not args.digital,
                                out_formats=formats, out_dir=out_dir,
                                base_name=base,
-                               max_pages=getattr(args, "max_pages", None))
+                               max_pages=getattr(args, "max_pages", None),
+                               pdf_layout=getattr(args, "pdf_layout",
+                                                  "organized"))
     for fmt, path in written.items():
         print(f"{fmt:<10} -> {path} ({path.stat().st_size} bytes)")
     return 0
@@ -513,6 +515,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--title", default=None)
     p.add_argument("--formats", default="tex",
                    help="comma list: tex,clean-tex,pdf,docx,html,json,md")
+    p.add_argument("--pdf-layout", choices=["organized", "faithful"],
+                   default="organized",
+                   help="organized = reflowed/typeset; faithful = same layout "
+                        "as the input page with a searchable text layer")
     p.add_argument("--max-pages", type=int, default=None,
                    help="stop after N pages")
     p.add_argument("--digital", action="store_true",

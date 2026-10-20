@@ -133,8 +133,13 @@ class PageViewer(QWidget):
         self._rects = {}
         path = page.get("image_path")
         pix = QPixmap()
-        if path and Path(path).exists():
-            pix.load(str(path))
+        if path:
+            resolved = Path(str(path))
+            if not resolved.is_absolute():
+                from ..core.config import CFG
+                resolved = CFG.artifacts_dir / resolved
+            if resolved.exists():
+                pix.load(str(resolved))
         if pix.isNull():
             w = int(page.get("width") or 800)
             h = int(page.get("height") or 1131)
@@ -256,6 +261,14 @@ class _ZoomView(QGraphicsView):
     def fit(self) -> None:
         self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._zoom = 1.0
+
+    def resizeEvent(self, event):                   # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        # The viewer is often populated before the window is shown; keep the
+        # page fitted to the canvas until the user explicitly zooms.
+        if self._zoom == 1.0 and not self.sceneRect().isEmpty():
+            self.fitInView(self.sceneRect(),
+                           Qt.AspectRatioMode.KeepAspectRatio)
 
     def mousePressEvent(self, event):               # noqa: N802 - Qt API
         if event.button() == Qt.MouseButton.LeftButton:

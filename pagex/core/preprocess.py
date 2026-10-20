@@ -28,6 +28,17 @@ THUMB_PX = 256
 # ---------------------------------------------------------------------------
 # loading
 # ---------------------------------------------------------------------------
+def _pix_to_rgb(pix) -> np.ndarray:
+    """PyMuPDF pixmap -> contiguous RGB uint8 array (shared by loaders)."""
+    img = np.frombuffer(pix.samples, dtype=np.uint8)
+    img = img.reshape(pix.height, pix.width, pix.n)
+    if pix.n == 4:                           # RGBA -> RGB
+        img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+    elif pix.n == 1:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    return np.ascontiguousarray(img)
+
+
 def load_pdf_page(pdf_path: str | Path, page_no: int, dpi: int = PDF_DPI) -> np.ndarray:
     """Rasterise one PDF page to an RGB ndarray (PyMuPDF = no poppler dep)."""
     import fitz
@@ -35,15 +46,7 @@ def load_pdf_page(pdf_path: str | Path, page_no: int, dpi: int = PDF_DPI) -> np.
     try:
         if not 0 <= page_no < doc.page_count:
             raise IndexError(f"page {page_no} out of range ({doc.page_count})")
-        page = doc.load_page(page_no)
-        pix = page.get_pixmap(dpi=dpi)
-        img = np.frombuffer(pix.samples, dtype=np.uint8)
-        img = img.reshape(pix.height, pix.width, pix.n)
-        if pix.n == 4:                       # RGBA -> RGB
-            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
-        elif pix.n == 1:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-        return np.ascontiguousarray(img)
+        return _pix_to_rgb(doc.load_page(page_no).get_pixmap(dpi=dpi))
     finally:
         doc.close()
 
@@ -52,6 +55,39 @@ def pdf_page_count(pdf_path: str | Path) -> int:
     import fitz
     with fitz.open(str(pdf_path)) as doc:
         return doc.page_count
+
+
+def page_count(path: str | Path, max_pages: int | None = None) -> int:
+    """Number of pages that :func:`iter_pages` will yield (no rasterisation)."""
+    path = Path(path)
+    n = pdf_page_count(path) if path.suffix.lower() == ".pdf" else 1
+    if max_pages is not None:
+        n = min(n, max(1, int(max_pages)))
+    return max(0, n)
+
+
+def iter_pages(path: str | Path, dpi: int = PDF_DPI,
+               max_pages: int | None = None):
+    """Yield pages **one at a time** instead of materialising the whole PDF.
+
+    A 126-page 200 dpi scan is ~1.2 GB as a list of RGB arrays.  Streaming
+    keeps only the current page resident, so the VLM can coexist with a large
+    document on an 8 GB laptop and page 1 is available in ~0.15 s.
+    """
+    path = Path(path)
+    if path.suffix.lower() != ".pdf":
+        yield load_image(path)
+        return
+    import fitz
+    doc = fitz.open(str(path))
+    try:
+        n = doc.page_count
+        if max_pages is not None:
+            n = min(n, max(1, int(max_pages)))
+        for i in range(n):
+            yield _pix_to_rgb(doc.load_page(i).get_pixmap(dpi=dpi))
+    finally:
+        doc.close()
 
 
 def load_image(path: str | Path) -> np.ndarray:
@@ -65,19 +101,12 @@ def load_image(path: str | Path) -> np.ndarray:
 
 def load_pages(path: str | Path, dpi: int = PDF_DPI,
                max_pages: int | None = None) -> list[np.ndarray]:
-    """All pages of a PDF (capped at *max_pages*), or a single image, as RGB arrays.
+    """Eager compatibility wrapper around :func:`iter_pages`.
 
-    The cap matters for big scans (the bundled AI notes are 126 pages): an
-    8 GB laptop must be able to index a document incrementally instead of
-    rasterising everything at once.
+    New code should stream with ``iter_pages``; this remains for tests and
+    callers that genuinely need every page in memory at once.
     """
-    path = Path(path)
-    if path.suffix.lower() == ".pdf":
-        n = pdf_page_count(path)
-        if max_pages is not None:
-            n = min(n, max(1, int(max_pages)))
-        return [load_pdf_page(path, i, dpi=dpi) for i in range(n)]
-    return [load_image(path)]
+    return list(iter_pages(path, dpi=dpi, max_pages=max_pages))
 
 
 # ---------------------------------------------------------------------------

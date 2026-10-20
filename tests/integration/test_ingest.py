@@ -137,6 +137,46 @@ def test_tc_int_03_incremental_and_targeted_delete(tmp_store, tmp_path,
         == a_chunks
 
 
+def test_ingest_is_searchable_before_llm_enrichment(tmp_store, tmp_path,
+                                                    sample_page, canned_vision,
+                                                    canned_generate, canned_embed):
+    """Pass 1 marks the document ready; LLM KG enrichment runs afterwards."""
+    path = _write_page(tmp_path, sample_page, "deferred.png")
+    seen: dict[str, object] = {}
+
+    def on_ready(doc_id: str) -> None:
+        seen["doc_id"] = doc_id
+        seen["ready_status"] = tmp_store.get_document(doc_id)["status"]
+
+    def generate(prompt, *args, **kwargs):
+        if "key concepts" in str(prompt):
+            seen["enrich_status"] = tmp_store.get_document(
+                str(seen["doc_id"]))["status"]
+        return canned_generate(prompt, *args, **kwargs)
+
+    report = ingest(path, store=tmp_store, vision_fn=canned_vision,
+                    generate_fn=generate, embed_fn=canned_embed,
+                    on_ready=on_ready)
+    assert report.ok
+    assert seen["ready_status"] == "ready"
+    assert seen["enrich_status"] == "enriching"
+    assert tmp_store.get_document(report.doc_id)["status"] == "ready"
+
+
+def test_ingest_paths_reports_live_pages(tmp_store, tmp_path, sample_page,
+                                         canned_vision, canned_generate,
+                                         canned_embed):
+    path = _write_page(tmp_path, sample_page, "live.png")
+    seen: list[tuple[str, int]] = []
+    reports = ingest_paths(
+        [path], store=tmp_store, vision_fn=canned_vision,
+        generate_fn=canned_generate, embed_fn=canned_embed,
+        on_page=lambda doc_id, page_no: seen.append((doc_id, page_no)))
+    assert reports[0].ok
+    assert seen and all(doc_id == reports[0].doc_id for doc_id, _ in seen)
+    assert {page_no for _, page_no in seen} == {1}
+
+
 def test_tc_int_03_ingest_paths_reports_failures(tmp_store, tmp_path,
                                                  sample_page, canned_vision,
                                                  canned_generate, canned_embed):

@@ -43,9 +43,10 @@ def canned_vision():
     def _vision(image, prompt, payload: str | None = None):
         if payload is not None:
             return FakeResult(payload)
-        if "layout" in prompt.lower() or "regions" in prompt and "content" not in prompt:
+        from pagex.core.parse import CROP_PROMPT, LAYOUT_PROMPT
+        if prompt.startswith(LAYOUT_PROMPT):
             return FakeResult(fixtures.CANNED_LAYOUT_JSON)
-        if "highlighted region" in prompt or "ONLY the highlighted" in prompt:
+        if prompt.startswith(CROP_PROMPT):
             return FakeResult(fixtures.CANNED_CROP_JSON)
         return FakeResult(fixtures.CANNED_PAGE_JSON)
     return _vision

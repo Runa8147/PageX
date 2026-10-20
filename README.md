@@ -70,6 +70,30 @@ python -m venv .venv
 the same implementation (`pagex/cli.py`, tested in
 `tests/integration/test_cli.py`).
 
+### Desktop workspace
+
+`pagex gui` opens a quiet, dark-first workspace: a **Library** of all indexed
+documents, a **Reader** with page rail, live block overlays and a compact
+editor, and a single **Ask PageX** surface for grounded answers or passage
+search.  Imports stream page-by-page, so the first page is visible long before
+a large scan finishes.  The design follows the "sidebar + prompt area" pattern:
+navigation and recent documents live on the left, the focused work happens on
+one canvas, and technical IDs never leak into the primary UI.
+
+### Export layouts (the VLM contract)
+
+Because PageX uses a VLM to preserve structure - not plain OCR - exporting asks
+which contract you want:
+
+| mode | result |
+|---|---|
+| **Organized / optimized** | reflowed, typeset PDF (plus DOCX, HTML, Markdown, LaTeX); best for sharing and reading |
+| **Same layout as input** | original page raster + invisible VLM text layer; every position, column, equation and handwritten mark stays exactly where it was, while the PDF remains selectable and searchable |
+
+From the GUI choose **Export** in the Reader; from the CLI use
+`pagex convert-notes notes.pdf --formats pdf --pdf-layout faithful` (or
+`--pdf-layout organized`).
+
 ### Pre-demo ritual
 
 ```bash

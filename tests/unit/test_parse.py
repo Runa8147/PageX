@@ -125,6 +125,14 @@ def test_rescale_clamps_and_swaps_inverted_corners():
     assert rescale([0, 0, 5000, 5000], W, H)[2] == pytest.approx(W)
 
 
+def test_parse_page_json_keeps_layout_hint():
+    payload = ('{"caption":"two columns","layout":"two_column",'
+               '"regions":[]}')
+    parsed = parse_page_json(payload, W, H)
+    assert parsed.caption == "two columns"
+    assert parsed.layout == "two_column"
+
+
 def test_parse_page_json_from_canned_fixture():
     parsed = parse_page_json(fixtures.CANNED_PAGE_JSON, W, H)
     assert parsed.caption

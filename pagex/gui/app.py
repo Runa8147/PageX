@@ -20,7 +20,7 @@ def make_app(argv: list[str] | None = None, theme: str | None = None) -> QApplic
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("PageX")
     app.setOrganizationName("PageX")
-    wanted = (theme or os.environ.get("PAGEX_THEME") or saved_theme("light"))
+    wanted = (theme or os.environ.get("PAGEX_THEME") or saved_theme("dark"))
     apply_theme(app, wanted)
     return app
 
