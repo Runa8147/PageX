@@ -40,9 +40,10 @@ class ModelsWizard(QDialog):
         self._busy = False
 
         root = QVBoxLayout(self)
+        root.setSpacing(8)
         self.header = QLabel(f"Models directory: {CFG.models_dir}")
         self.header.setWordWrap(True)
-        self.header.setStyleSheet("color:#6b7280;")
+        self.header.setObjectName("muted")
         root.addWidget(self.header)
 
         self.table = QTableWidget(0, 4)
@@ -61,11 +62,13 @@ class ModelsWizard(QDialog):
 
         self.status = QLabel("Ready.")
         self.status.setWordWrap(True)
-        self.status.setStyleSheet("color:#374151;")
+        self.status.setObjectName("muted")
         root.addWidget(self.status)
 
         buttons = QHBoxLayout()
+        buttons.setSpacing(6)
         self.btn_download = QPushButton("Download missing models…")
+        self.btn_download.setProperty("primary", True)
         self.btn_download.clicked.connect(self.start_download)
         self.btn_verify = QPushButton("Verify")
         self.btn_verify.clicked.connect(self.start_verify)

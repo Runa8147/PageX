@@ -22,6 +22,7 @@ from .chat_pane import ChatPane
 from .editor import BlockEditor
 from .library_view import LibraryView
 from .settings_dialog import SettingsDialog
+from .theme import apply_theme, current_theme_name
 from .viewer import PageViewer
 from .workers import run_in_background, wait_all
 
@@ -71,16 +72,26 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(6, 6, 6, 6)
 
         bar = QHBoxLayout()
+        bar.setSpacing(8)
         self.search_edit = QLineEdit()
+        self.search_edit.setObjectName("searchEdit")
         self.search_edit.setPlaceholderText(
-            "hybrid search: vector + BM25 + graph  (Enter)")
+            "Search notes, equations, diagrams…  (Enter)")
+        self.search_edit.setClearButtonEnabled(True)
         self.search_edit.returnPressed.connect(
             lambda: self.run_search(self.search_edit.text()))
         self.search_btn = QPushButton("Search")
+        self.search_btn.setProperty("primary", True)
+        self.search_btn.setDefault(True)
         self.search_btn.clicked.connect(
             lambda: self.run_search(self.search_edit.text()))
+        self.theme_btn = QPushButton()
+        self.theme_btn.setToolTip("Toggle light / dark theme")
+        self.theme_btn.setFixedWidth(44)
+        self.theme_btn.clicked.connect(self.toggle_theme)
         bar.addWidget(self.search_edit, 1)
         bar.addWidget(self.search_btn)
+        bar.addWidget(self.theme_btn)
         layout.addLayout(bar)
 
         self.tabs = QTabWidget()
@@ -88,11 +99,14 @@ class MainWindow(QMainWindow):
         self.editor = BlockEditor(self.store)
         self.chat = ChatPane(self.store)
         from PyQt6.QtWidgets import QPlainTextEdit
+        from PyQt6.QtGui import QFont
         self.latex_edit = QPlainTextEdit()
         self.latex_edit.setReadOnly(True)
         self.latex_edit.setPlaceholderText(
             "annotated LaTeX (single source of truth) appears here")
-        self.latex_edit.setStyleSheet("font-family:monospace;")
+        mono = QFont("monospace")
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        self.latex_edit.setFont(mono)
         self.search_list = QListWidget()
 
         self.tabs.addTab(self.viewer, "Viewer")
@@ -122,6 +136,7 @@ class MainWindow(QMainWindow):
         self._watch_timer = QTimer(self)
         self._watch_timer.setInterval(2000)
         self._watch_timer.timeout.connect(self._poll_watch)
+        self._sync_theme_ui()
 
     def _build_menu(self) -> None:
         m_file = self.menuBar().addMenu("&File")
@@ -162,10 +177,49 @@ class MainWindow(QMainWindow):
         m_tools.addAction(act_smoke)
         m_tools.addAction(act_models)
 
+        m_view = self.menuBar().addMenu("&View")
+        self.act_light = QAction("Light theme", self)
+        self.act_light.setCheckable(True)
+        self.act_light.triggered.connect(lambda: self.set_theme("light"))
+        self.act_dark = QAction("Dark theme", self)
+        self.act_dark.setCheckable(True)
+        self.act_dark.triggered.connect(lambda: self.set_theme("dark"))
+        m_view.addAction(self.act_light)
+        m_view.addAction(self.act_dark)
+
         m_help = self.menuBar().addMenu("&Help")
         act_about = QAction("About PageX", self)
         act_about.triggered.connect(self._about)
         m_help.addAction(act_about)
+
+    # ------------------------------------------------------------------
+    # theme
+    # ------------------------------------------------------------------
+    def set_theme(self, mode: str) -> None:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, mode)
+        self.viewer.refresh_theme()
+        self._sync_theme_ui()
+
+    def toggle_theme(self) -> None:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is None:
+            return
+        self.set_theme("dark" if current_theme_name(app) != "dark" else "light")
+
+    def _sync_theme_ui(self) -> None:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        dark = bool(app) and current_theme_name(app) == "dark"
+        self.theme_btn.setText("☀" if dark else "🌙")
+        self.theme_btn.setToolTip(
+            "Switch to light theme" if dark else "Switch to dark theme")
+        if hasattr(self, "act_light"):
+            self.act_light.setChecked(not dark)
+            self.act_dark.setChecked(dark)
 
     # ------------------------------------------------------------------
     # wiring

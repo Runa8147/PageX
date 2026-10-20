@@ -34,11 +34,12 @@ class ChatPane(QWidget):
     # -- construction ----------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
 
         head = QHBoxLayout()
         self.session_label = QLabel("session: new")
-        self.session_label.setStyleSheet("color:#6b7280;")
+        self.session_label.setObjectName("muted")
         self.new_btn = QPushButton("New session")
         self.new_btn.clicked.connect(self.new_session)
         head.addWidget(self.session_label, 1)
@@ -53,7 +54,9 @@ class ChatPane(QWidget):
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
-        rl.addWidget(QLabel("Sources (click to open in viewer)"))
+        src_label = QLabel("Sources (click to open in viewer)")
+        src_label.setObjectName("muted")
+        rl.addWidget(src_label)
         self.sources = QListWidget()
         self.sources.itemActivated.connect(self._on_source)
         self.sources.itemClicked.connect(self._on_source)
@@ -63,18 +66,21 @@ class ChatPane(QWidget):
         layout.addWidget(split, 1)
 
         ask = QHBoxLayout()
+        ask.setSpacing(8)
         self.input = QLineEdit()
-        self.input.setPlaceholderText("e.g. derive the moment of inertia of a solid cylinder")
+        self.input.setPlaceholderText("Ask about your notes… e.g. derive the moment of inertia")
         self.input.returnPressed.connect(self._ask)
         self.send_btn = QPushButton("Ask")
+        self.send_btn.setProperty("primary", True)
         self.send_btn.clicked.connect(self._ask)
         ask.addWidget(self.input, 1)
         ask.addWidget(self.send_btn)
         layout.addLayout(ask)
 
-        self.hint = QLabel("answers are grounded: no retrieved context -> the model "
-                           "says it does not know (ADR-006).")
-        self.hint.setStyleSheet("color:#6b7280;font-size:11px;")
+        self.hint = QLabel("Answers are grounded: no retrieved context → the model "
+                           "says it does not know.")
+        self.hint.setObjectName("muted")
+        self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
 
     # -- session ---------------------------------------------------------
@@ -109,6 +115,10 @@ class ChatPane(QWidget):
     def show_answer(self, answer: str, citations: list[dict],
                     elapsed_s: float | None = None) -> None:
         """Called by the window when the RAG worker finishes."""
+        from .theme import accent, is_dark, muted
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        dark = is_dark(app)
         self.set_busy(False)
         self._append("pagex", answer or "(no answer)")
         self._last_citations = list(citations or [])
@@ -120,13 +130,14 @@ class ChatPane(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, c)
             item.setToolTip(str(c.get("snippet", ""))[:400])
             self.sources.addItem(item)
-        tail = f'<span style="color:#9ca3af"> · {elapsed_s:.1f}s</span>' \
+        dim = muted(app)
+        tail = f'<span style="color:{dim}"> · {elapsed_s:.1f}s</span>' \
             if elapsed_s else ""
         if self._last_citations:
+            srcs = ", ".join(sorted({c.get("source", "?") for c in self._last_citations}))
             self.transcript.append(
-                f'<span style="color:#6b7280;font-size:11px">'
-                f'{len(self._last_citations)} source(s) '
-                f'[{", ".join(sorted({c.get("source", "?") for c in self._last_citations}) )}]{tail}</span>')
+                f'<span style="color:{dim};font-size:11px">'
+                f'{len(self._last_citations)} source(s) [{srcs}]{tail}</span>')
 
     def show_error(self, message: str) -> None:
         self.set_busy(False)
@@ -135,11 +146,18 @@ class ChatPane(QWidget):
 
     # -- helpers ---------------------------------------------------------
     def _append(self, who: str, text: str, *, raw: bool = False) -> None:
+        from .theme import accent, ink
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
         body = text if raw else html.escape(text).replace("\n", "<br>")
-        color = "#2563eb" if who == "you" else "#16a34a"
+        you_color = accent(app)
+        bot_color = "#16a34a" if not (
+            app and str(app.property("pagexTheme") or "") == "dark") else "#4ade80"
+        fg = ink(app)
+        color = you_color if who == "you" else bot_color
         self.transcript.append(
             f'<p style="margin:6px 0"><b style="color:{color}">{who}&gt;</b> '
-            f'<span style="color:#111827">{body}</span></p>')
+            f'<span style="color:{fg}">{body}</span></p>')
         self.transcript.verticalScrollBar().setValue(
             self.transcript.verticalScrollBar().maximum())
 

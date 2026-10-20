@@ -45,18 +45,23 @@ class PageViewer(QWidget):
     # -- construction ----------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
 
         bar = QHBoxLayout()
+        bar.setSpacing(6)
         self.prev_btn = QPushButton("◀")
+        self.prev_btn.setFixedWidth(44)
         self.next_btn = QPushButton("▶")
+        self.next_btn.setFixedWidth(44)
         self.prev_btn.clicked.connect(lambda: self.goto(self._index - 1))
         self.next_btn.clicked.connect(lambda: self.goto(self._index + 1))
         self.page_label = QLabel("no document selected")
-        self.page_label.setStyleSheet("font-weight:600;")
+        self.page_label.setObjectName("pageTitle")
         self.caption_label = QLabel("")
-        self.caption_label.setStyleSheet("color:#6b7280;")
+        self.caption_label.setObjectName("muted")
         self.zoom_label = QLabel("")
+        self.zoom_label.setObjectName("muted")
         bar.addWidget(self.prev_btn)
         bar.addWidget(self.next_btn)
         bar.addWidget(self.page_label)
@@ -67,19 +72,22 @@ class PageViewer(QWidget):
         self.scene = QGraphicsScene(self)
         self.view = _ZoomView(self.scene)
         self.view.clicked.connect(self._on_scene_click)
+        from PyQt6.QtGui import QPainter
         self.view.setRenderHints(QPainter.RenderHint.Antialiasing)
         layout.addWidget(self.view, 1)
 
         legend = QHBoxLayout()
+        legend.setSpacing(10)
         for kind, color in KIND_COLORS.items():
             sw = QLabel(f'<span style="color:{color}">■</span> {kind}')
-            sw.setStyleSheet("font-size:11px;")
+            sw.setObjectName("muted")
             legend.addWidget(sw)
         legend.addStretch(1)
         self.sel_label = QLabel("")
-        self.sel_label.setStyleSheet("color:#6b7280;font-size:11px;")
+        self.sel_label.setObjectName("muted")
         legend.addWidget(self.sel_label)
         layout.addLayout(legend)
+        self.refresh_theme()
 
     # -- data ------------------------------------------------------------
     def set_document(self, pages: list[dict], blocks: list[dict]) -> None:
@@ -202,6 +210,17 @@ class PageViewer(QWidget):
                 break
         self.highlight_blocks([str(b) for b in (citation.get("block_ids") or [])])
 
+    def refresh_theme(self) -> None:
+        """Re-apply canvas background for the active light/dark theme."""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from .theme import is_dark
+            dark = is_dark(QApplication.instance())
+        except Exception:
+            dark = False
+        self.view.setBackgroundBrush(
+            QColor("#0b1220") if dark else QColor("#e8edf3"))
+
 
 def _kind_of(blocks: list[dict], block_id: str) -> str:
     for b in blocks:
@@ -219,7 +238,13 @@ class _ZoomView(QGraphicsView):
         super().__init__(scene, parent)
         self._zoom = 1.0
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        self.setBackgroundBrush(QColor("#e5e7eb"))
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from .theme import is_dark
+            dark = is_dark(QApplication.instance())
+        except Exception:
+            dark = False
+        self.setBackgroundBrush(QColor("#0b1220" if dark else "#e8edf3"))
 
     def wheelEvent(self, event):                    # noqa: N802 - Qt API
         delta = event.angleDelta().y()

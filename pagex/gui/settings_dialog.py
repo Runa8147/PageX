@@ -43,7 +43,7 @@ class SettingsDialog(QDialog):
 
         self.note = QLabel("")
         self.note.setWordWrap(True)
-        self.note.setStyleSheet("color:#6b7280;")
+        self.note.setObjectName("muted")
         root.addWidget(self.note)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save |
@@ -68,7 +68,7 @@ class SettingsDialog(QDialog):
                    f' · peak RSS {b.get("rss_peak_gb", "?")} GB')
         probe = QLabel(summary)
         probe.setWordWrap(True)
-        probe.setStyleSheet("color:#374151;background:#f3f4f6;padding:6px;")
+        probe.setObjectName("probeBox")
         form.addRow("hardware", probe)
 
         self.threads_n = QSpinBox()
@@ -146,8 +146,9 @@ class SettingsDialog(QDialog):
             edit = QLineEdit(getattr(CFG, key))
             path = CFG.model_path(key)
             exists = path.exists()
-            edit.setStyleSheet("color:%s;" % ("#16a34a" if exists else "#dc2626"))
+            edit.setProperty("modelState", "ok" if exists else "missing")
             btn = QPushButton("…")
+            btn.setFixedWidth(36)
             btn.clicked.connect(lambda _=False, e=edit: self._pick_model(e))
             row = QHBoxLayout()
             row.addWidget(edit, 1)
@@ -156,10 +157,9 @@ class SettingsDialog(QDialog):
             holder.setLayout(row)
             form.addRow(label, holder)
             self.model_edits[key] = edit
-        hint = QLabel("Green = found on disk. Download missing models with "
-                      "`python tools/download_models.py`.")
+        hint = QLabel("Green = found on disk. Use Tools → Download models… for missing weights.")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#6b7280;")
+        hint.setObjectName("muted")
         form.addRow("", hint)
         return w
 
@@ -174,7 +174,7 @@ class SettingsDialog(QDialog):
             self, "Choose GGUF", str(CFG.models_dir), "GGUF models (*.gguf)")
         if path:
             edit.setText(str(Path(path)))
-            edit.setStyleSheet("color:#16a34a;")
+            edit.setProperty("modelState", "ok")
 
     # -- persist ---------------------------------------------------------
     def _save(self) -> None:

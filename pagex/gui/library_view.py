@@ -40,10 +40,11 @@ class LibraryView(QWidget):
     # ------------------------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         title = QLabel("Library")
-        title.setStyleSheet("font-weight:600;font-size:14px;")
+        title.setObjectName("pageTitle")
         layout.addWidget(title)
 
         self.table = QTableWidget(0, len(COLUMNS))
@@ -53,6 +54,7 @@ class LibraryView(QWidget):
         self.table.setSelectionMode(
             QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -63,7 +65,9 @@ class LibraryView(QWidget):
         layout.addWidget(self.table, 1)
 
         row = QHBoxLayout()
+        row.setSpacing(6)
         self.ingest_btn = QPushButton("Ingest…")
+        self.ingest_btn.setProperty("primary", True)
         self.ingest_btn.setToolTip("Index an image, a PDF or a whole folder")
         self.ingest_btn.clicked.connect(self._pick_files)
         self.refresh_btn = QPushButton("Refresh")
@@ -83,8 +87,8 @@ class LibraryView(QWidget):
         layout.addWidget(self.watch_btn)
 
         self.hint = QLabel("Drop a photo of your notes here via Ingest…")
+        self.hint.setObjectName("muted")
         self.hint.setWordWrap(True)
-        self.hint.setStyleSheet("color:#6b7280;font-size:11px;")
         layout.addWidget(self.hint)
 
     # ------------------------------------------------------------------
