@@ -111,7 +111,8 @@ def test_installed_mode_falls_back_to_platformdirs(monkeypatch):
     cfg_home = str(paths.user_config_dir()).lower()
     data_home = str(paths.user_data_dir()).lower()
     if os.name == "nt":                             # pragma: no cover
-        assert "appdata" in cfg_home and "localappdata" in data_home
+        assert cfg_home.endswith("\\appdata\\roaming\\pagex")
+        assert data_home.endswith("\\appdata\\local\\pagex")
     else:                                           # pragma: no cover (Linux CI)
         assert cfg_home.endswith("/pagex") and data_home.endswith("/pagex")
 
