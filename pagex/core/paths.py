@@ -93,7 +93,8 @@ def refresh() -> None:
 
 def user_config_dir() -> Path:
     if _HAVE_PLATFORMDIRS:             # pragma: no cover - trivial
-        return Path(_pf_user_config_dir(APP_NAME, appauthor=False))
+        # Windows config is roaming; data (database/artifacts/models) is local.
+        return Path(_pf_user_config_dir(APP_NAME, appauthor=False, roaming=True))
     if os.name == "nt":                # pragma: no cover
         base = os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming")
         return Path(base) / APP_NAME

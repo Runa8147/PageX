@@ -47,7 +47,10 @@ python -m venv .venv
 .venv/bin/pip install -e ".[dev]"      # compiler-free: test/build tools
 .venv/bin/pip install -e ".[llm]"      # llama-cpp-python (the `llm` extra)
 #    the `llm` extra compiles llama.cpp:
-#      Linux:   sudo apt install build-essential cmake
+#      Linux:   sudo apt install build-essential cmake \
+#                 libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 \
+#                 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+#                 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0
 #      Windows: VS Build Tools + CMake, then
 #               .venv\Scripts\pip install llama-cpp-python
 #      CPU-only optimised build: CMAKE_ARGS="-DGGML_NATIVE=ON" pip install ...

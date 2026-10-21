@@ -57,7 +57,13 @@ def test_tc_int_06_search_json(seeded_db, capsys):
     assert payload["query"] == "moment of inertia"
     assert payload["citations"], "CLI search returned no citations"
     assert payload["citations"][0]["doc_id"] == report.doc_id
-    assert {"vector", "bm25"} <= set(payload["rankers"])
+    # CI installs the test/build extras but not the GGUF embedder; BM25 and
+    # graph must still work, while the vector ranker is expected only when the
+    # model pack is present.
+    expected = {"bm25", "graph"}
+    if MODELS_OK:
+        expected.add("vector")
+    assert expected <= set(payload["rankers"])
 
 
 @needs_models

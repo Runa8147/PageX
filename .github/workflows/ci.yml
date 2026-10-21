@@ -3,7 +3,7 @@
 # OS-parity is the point: the GUI (PyQt6 platform plugins), the SQLite/FTS5
 # store, PyMuPDF rendering and the frozen PyInstaller binaries all have
 # Windows-specific failure modes. Every commit/PR is therefore proven on BOTH
-# ubuntu-latest and windows-latest (x two Python versions) before a `v*` tag
+# ubuntu-latest and windows-latest (x three Python versions) before a `v*` tag
 # is allowed to produce release artifacts (`package` needs `test`).
 #
 # The test job deliberately installs only `.[dev]` - never the `llm` extra -
@@ -49,6 +49,14 @@ jobs:
       - name: Install package (no compiler needed - `llm` extra not installed)
         run: python -m pip install -e ".[dev]"
 
+      - name: Install Linux Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0
+
       - name: Run test suite (headless Qt on both OSes)
         env:
           QT_QPA_PLATFORM: offscreen
@@ -82,6 +90,14 @@ jobs:
 
       - name: Install package + PyInstaller
         run: python -m pip install -e ".[dev]" pyinstaller
+
+      - name: Install Linux Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0
 
       # The build scripts install the `llm` extra (llama-cpp-python) as well
       # and verify the dist/ outputs, so the frozen apps really ship inference.
