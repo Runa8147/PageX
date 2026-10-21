@@ -95,7 +95,7 @@ python -m pagex.eval.retrieval --json
 pagex smoke                          # 15/15, no heavy models
 pagex bench                          # refresh bench.json before a demo
 python -m pagex.testing.fixtures     # regenerates samples/ deterministically
-QT_QPA_PLATFORM=offscreen python -m pytest tests -q -m "not slow"   # 164 tests
+QT_QPA_PLATFORM=offscreen python -m pytest tests -q -m "not slow"   # 172 tests
 ```
 
 ## WP13 — distribution & cross-platform (this branch)
@@ -143,4 +143,4 @@ pagex models list                    # 8 weights, SHA-256 + license, never bundl
 | peak RSS | ≤ 6.2 GB | **3.05 GB** (release → 0.15 GB) |
 | LLM | ≥ 6 tok/s for tier 1 | **7.86 tok/s** |
 | VLM | functional on tier 3 | **~93 s/page** (was 1904 s/page) |
-| suite | green | **164 passed, 0 failed** (`-m "not slow"`) |
+| suite | green | **172 passed, 0 failed** (`-m "not slow"`) |

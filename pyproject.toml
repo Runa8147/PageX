@@ -42,7 +42,7 @@ pagex = "pagex.cli:main"
 pagex-gui = "pagex.gui.app:main"
 
 [project.urls]
-Repository = "https://github.com/pagex/pagex"
+Repository = "https://github.com/Runa8147/PageX"
 
 [tool.setuptools.packages.find]
 include = ["pagex*"]

@@ -33,7 +33,7 @@ global command palette, and a diagnostics pane.
 ## 1. Where we are
 
 The cross-platform branch is merged into `master` and the new work branch is
-`feature/ui-ux-overhaul`. The test suite is green (164 passed, 1 slow test
+`feature/ui-ux-overhaul`. The test suite is green (172 passed, 1 slow test
 deselected).
 
 The current GUI is functional but still reads like an engineering demo:

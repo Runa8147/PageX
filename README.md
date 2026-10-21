@@ -4,6 +4,8 @@
 
 Everything runs **locally and fully offline** on a 8 GB / i3-class laptop: no cloud APIs, no GPU, no telemetry. Built as a B.Tech final-year project following the *PageX Master Build Manual* (ADRs 001–008).
 
+**Repository:** [github.com/Runa8147/PageX](https://github.com/Runa8147/PageX)
+
 ```
 camera / scan ──► preprocess ──► VLM (1 call/page) ──► blocks ──► annotated .tex (SSOT)
                                         │                          │
@@ -37,6 +39,9 @@ Works the same on Linux and Windows (Windows: replace `.venv/bin/python`
 with `.venv\Scripts\python`, or just `pagex` after a `pip install -e .`).
 
 ```bash
+git clone https://github.com/Runa8147/PageX.git
+cd PageX
+
 # 1. environment (Python 3.11+)
 python -m venv .venv
 .venv/bin/pip install -e ".[dev]"      # compiler-free: test/build tools
@@ -47,7 +52,7 @@ python -m venv .venv
 #               .venv\Scripts\pip install llama-cpp-python
 #      CPU-only optimised build: CMAKE_ARGS="-DGGML_NATIVE=ON" pip install ...
 
-# 2. models (~5 GB, resumable, SHA-256 verified - never bundled, ADR-002)
+# 2. models (~7 GB, resumable, SHA-256 verified - never bundled, ADR-002)
 .venv/bin/pagex models download        # offline: pagex models install-pack <zip>
 
 # 3. does this machine work? -> paths, deps, model + config status
@@ -114,7 +119,7 @@ portable artifacts: see [docs/packaging.md](docs/packaging.md).
 
 ---
 
-## Distribution (one engine, three faces)
+## Distribution (one engine, five entry ramps)
 
 Five entry ramps are documented in [docs/packaging.md](docs/packaging.md)
 (command index: [packaging/README.md](packaging/README.md)):
@@ -146,7 +151,7 @@ it, `.dockerignore` enforces it, and licenses live in [NOTICE](NOTICE)
 | embedder (MiniLM-L6 Q4, 384-dim) | **469 texts/s** | ≥ 30 |
 | p95 hybrid search (300-chunk corpus) | **21 ms** | < 3000 ms |
 | peak RSS with VLM resident | **3.05 GB** (release → 0.15 GB) | < 6.2 GB |
-| test suite | **164 passed, 0 failed** (`-m "not slow"`, 37 s) | — |
+| test suite | **172 passed, 0 failed** (`-m "not slow"`, ~44 s) | — |
 | smoke | **15/15 passed** (0.5 s) | — |
 
 The VLM was benchmarked against Qwen2.5-VL-3B (41–51 s just to encode one page → ~1900 s/page overall) before switching to **Qwen3-VL-2B** (8–17 s encode → ~90 s/page, 1.3 GB less RAM). See `docs/decisions.md`.
@@ -164,8 +169,9 @@ pagex/core/                config, paths (PAGEX_HOME/platformdirs ladder),
                            model_manifest (+ models_manifest.json), models
                            (ModelSlot), preprocess, parse, blocks, latex_export,
                            store (SQLite DDL), retrieve, rag, pipeline, watch
-pagex/gui/                 workers, library_view, viewer, editor, chat_pane,
-                           settings_dialog, models_wizard, main_window, app
+pagex/gui/                 workers, sidebar, library_view, reader, viewer, editor,
+                           chat_pane, export_dialog, settings_dialog, models_wizard,
+                           main_window, app
 pagex/probe.py, pagex/demo.py   hardware probe (-> bench.json), demo seeder
 pagex/testing/             fixtures (synthetic pages + queries), smoke
 pagex/eval/retrieval.py    Recall@5 / MRR harness
@@ -209,7 +215,7 @@ acquire (the `ModelSlot` evicts whatever is resident).
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest tests -q -m "not slow"  # CI matrix command (164 tests)
+.venv/bin/python -m pytest tests -q -m "not slow"  # CI matrix command
 .venv/bin/python -m pytest tests -q                # + real-GGUF tests (models present)
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/integration/test_gui.py -q
 ```

@@ -91,7 +91,7 @@ def _readme(include_models: bool, cli_rel: str | None) -> str:
         step2 = (
             "    Model weights are NOT included (that is what keeps this zip\n"
             "    small). Pick ONE option:\n"
-            "      a) online: fetch the ~5 GB of GGUFs once - resumable and\n"
+            "      a) online: fetch the ~7 GB of GGUFs once - resumable and\n"
             "         SHA-256 verified:\n"
             + _cli_block(cli_rel, "models download", indent="  ")
             + "      b) offline: copy pagex-models-pack.zip (or a models folder)\n"
@@ -122,7 +122,7 @@ Step 1 - EXTRACT
     Keep the folder structure - the launchers use paths relative to
     themselves.
 
-Step 2 - GET THE MODEL WEIGHTS (~5 GB, once)
+Step 2 - GET THE MODEL WEIGHTS (~7 GB, once)
 {step2}
 Step 3 - START THE APP
     Windows: double-click  Run-PageX.bat

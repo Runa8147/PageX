@@ -12,7 +12,7 @@
 ;        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\windows\pagex.iss
 ;
 ; SCOPE: the installer ships the frozen GUI onedir + config + samples only.
-; Model weights (GGUF, ~5 GB) are deliberately NOT installed here - they are
+; Model weights (GGUF, ~7 GB) are deliberately NOT installed here - they are
 ; downloaded on first run by the in-app model wizard (`pagex models
 ; download`, resumable and SHA-256 verified) or installed offline with
 ; `pagex models install-pack <zip>`. That keeps the setup file in the low
