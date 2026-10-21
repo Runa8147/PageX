@@ -32,7 +32,7 @@ jobs:
       fail-fast: false          # one broken combo must not hide the others
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

@@ -127,7 +127,7 @@ Five entry ramps are documented in [docs/packaging.md](docs/packaging.md)
 | 3 | headless image | `docker build -t pagex:cpu .` |
 | 4 | PyPI wheel + GitHub Releases | `python -m build`; releases automated on `v*` tags (`.github/workflows/ci.yml`) |
 
-CI runs the test suite on **ubuntu + windows × Python 3.11/3.12** on every
+CI runs the test suite on **ubuntu + windows × Python 3.11/3.12/3.13** on every
 push (`.github/workflows/ci.yml`), then builds the release artifacts for `v*`
 tags. **No artifact ever contains GGUF weights** (ADR-002) — the specs assert
 it, `.dockerignore` enforces it, and licenses live in [NOTICE](NOTICE)

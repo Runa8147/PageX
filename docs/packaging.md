@@ -137,7 +137,7 @@ pyinstaller --noconfirm pagex-cli.spec              # Windows
 
 | job | trigger | matrix | what it proves |
 |---|---|---|---|
-| `test` | every push / PR | ubuntu-latest, windows-latest × Python 3.11, 3.12 | the suite passes on both OSes with `QT_QPA_PLATFORM=offscreen` and no compiler (`.[dev]` only, `-m "not slow"`) |
+| `test` | every push / PR | ubuntu-latest, windows-latest × Python 3.11, 3.12, 3.13 | the suite passes on both OSes with `QT_QPA_PLATFORM=offscreen` and no compiler (`.[dev]` only, `-m "not slow"`) |
 | `package` | tags `v*`, after `test` | ubuntu-latest, windows-latest × Python 3.11 | the real release artifacts build: tarball on Linux, onedir + Inno installer on Windows |
 
 OS parity is the point of the matrix: Qt platform plugins, path handling,

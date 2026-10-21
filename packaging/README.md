@@ -73,5 +73,5 @@ once with `docker run --rm -v pagex-data:/data pagex:cpu models download`.
 ## Releases
 
 Pushing a tag `v*` runs `.github/workflows/ci.yml`: the `test` matrix
-(Ubuntu + Windows, Python 3.11 + 3.12) must pass, then the `package` job
+(Ubuntu + Windows, Python 3.11 + 3.12 + 3.13) must pass, then the `package` job
 builds the artifacts above and attaches them to the GitHub Release.
